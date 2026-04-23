@@ -1,0 +1,47 @@
+================================================================================
+  ELEMENT P2P — GET A LINK YOU CAN OPEN IN CHROME FOR YOUR CLIENT
+================================================================================
+
+You need a free tool called "Node.js" once (like installing Figma). After that
+you can get a normal website link in a few minutes.
+
+--------------------------------------------------------------------------------
+  FIRST TIME ONLY — Install Node.js
+--------------------------------------------------------------------------------
+  1. Open: https://nodejs.org
+  2. Download the "LTS" version and install with the default options.
+  3. Restart your computer if the next steps fail.
+
+--------------------------------------------------------------------------------
+  EASIEST (Windows) — Double-click the helper
+--------------------------------------------------------------------------------
+  1. Double-click:  Share-with-client.bat
+  2. Wait until it finishes building.
+  3. Your browser will open Netlify Drop; File Explorer will open your "dist" folder.
+  4. Drag the whole "dist" folder onto the Netlify page.
+  5. Netlify will show you a link like: https://random-name-123.netlify.app
+  6. In Chrome, open:  YOUR-LINK/presentation
+     Example: https://random-name-123.netlify.app/presentation
+  7. That /presentation page has a "Copy presentation link" button to send to the client.
+
+  If Netlify asks you to sign in, create a free account — you only do this once.
+
+--------------------------------------------------------------------------------
+  MANUAL (Mac or if you prefer typing)
+--------------------------------------------------------------------------------
+  1. Open Terminal in this project folder.
+  2. Run once:   npm install
+  3. Run:         npm run build
+  4. Open in Chrome: https://app.netlify.com/drop
+  5. Drag the "dist" folder onto the page.
+  6. Open YOUR-LINK/presentation in Chrome.
+
+--------------------------------------------------------------------------------
+  PRACTICE ON YOUR COMPUTER ONLY (no link to share)
+--------------------------------------------------------------------------------
+  1. In Terminal: npm install   (first time)
+  2. Then:        npm run dev
+  3. In Chrome open: http://localhost:5173/presentation
+  Only you can see this — use it to rehearse before you publish.
+
+================================================================================
