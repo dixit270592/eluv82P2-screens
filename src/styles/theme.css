@@ -1,7 +1,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-sans: 'Instrument Sans', system-ui, sans-serif;
   --font-size: 16px;
   --background: #ffffff;
   --foreground: oklch(0.145 0 0);
@@ -48,6 +48,12 @@
   --space-4: 1rem;
   /* Clearance for sticky bottom bars / step actions so scroll content isn’t clipped */
   --layout-sticky-clearance: 5rem;
+  /* Element P2P product accent (see src/app/tokens/brand.ts) */
+  --p2p-brand: #1FA97A;
+  --p2p-brand-hover: #178F67;
+  --p2p-brand-strong: #0E7A54;
+  --p2p-brand-surface: #F0FDF9;
+  --p2p-brand-border: #B8E8D9;
 }
 
 .dark {
@@ -126,6 +132,11 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-p2p-brand: var(--p2p-brand);
+  --color-p2p-brand-hover: var(--p2p-brand-hover);
+  --color-p2p-brand-strong: var(--p2p-brand-strong);
+  --color-p2p-brand-surface: var(--p2p-brand-surface);
+  --color-p2p-brand-border: var(--p2p-brand-border);
 }
 
 @layer base {

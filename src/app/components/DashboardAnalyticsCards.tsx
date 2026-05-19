@@ -27,6 +27,9 @@ const PREVIEW_ROW_LIMIT = 6;
 /** Slightly thicker bars for readability at a glance */
 const BAR_CLASS = "h-1 w-full min-w-0 overflow-hidden rounded-full";
 
+/** Vertical rhythm between bar rows (gap + row padding); ~25% tighter than 0.736 */
+const BAR_ROW_STACK = 0.736 * 0.75;
+
 export type BarRowItem = { name: string; count: number };
 
 type SortMode = "count-desc" | "count-asc" | "name-asc";
@@ -119,15 +122,16 @@ function MetricBarListBody({
     <>
       <div
         className={cn(
-          "flex flex-col gap-[calc(0.75rem*0.92)]",
+          "flex flex-col gap-[calc(0.75rem*var(--bar-row-stack))]",
           expanded && hasMore && "max-h-[260px] overflow-y-auto pr-1",
         )}
+        style={{ ["--bar-row-stack" as string]: BAR_ROW_STACK } as CSSProperties}
       >
         {visibleRows.map((row, i) => (
           <div
             key={`${row.name}-${i}`}
             title={`${row.name}: ${row.count}`}
-            className="flex flex-col gap-[calc(0.5rem*0.92)] rounded-md px-[calc(0.5rem*0.92)] py-[calc(0.5rem*0.92)] transition-colors duration-150 hover:bg-[var(--row-hover)]"
+            className="flex flex-col gap-[calc(0.5rem*var(--bar-row-stack))] rounded-md px-[calc(0.5rem*var(--bar-row-stack))] py-[calc(0.5rem*var(--bar-row-stack))] transition-colors duration-150 hover:bg-[var(--row-hover)]"
             style={
               {
                 "--row-hover": ROW_HOVER,
@@ -168,7 +172,7 @@ function MetricBarListBody({
       {hasMore ? (
         <button
           type="button"
-          className="mt-4 w-full rounded-md py-2 text-left text-xs font-medium transition-colors hover:bg-[#F9FAFB] sm:text-[13px]"
+          className="mt-2.5 w-full rounded-md py-1.5 text-left text-xs font-medium transition-colors hover:bg-[#F9FAFB] sm:text-[13px]"
           style={{ color: DASHBOARD_TEAL }}
           onClick={() => setExpanded((e) => !e)}
         >
@@ -190,10 +194,10 @@ function CompactCardHeader({
 }) {
   return (
     <div
-      className="border-b border-[#F2F4F7] px-4 py-3.5"
+      className="border-b border-[#F2F4F7] px-4 py-2.5"
       style={{ fontFamily: FONT }}
     >
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1">
         <div className="flex items-start justify-between gap-3">
           <h3
             className="min-w-0 flex-1 truncate text-base font-semibold leading-snug tracking-[-0.02em] sm:text-[17px]"
@@ -259,13 +263,13 @@ export function DashboardAnalyticsGrid({
 }) {
   return (
     <div
-      className={cn(
-        // Avoid 5-up on tablet/laptop: cards were too narrow (sm: was forcing 5 cols from 640px).
-        // Max 3 columns on large screens so each chart card has more breathing room.
-        // Slightly larger row-gap than column-gap on lg+ so stacked rows of cards breathe more.
-        "grid grid-cols-1 gap-4 gap-y-5 pb-12 sm:grid-cols-2 sm:gap-x-5 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-6 lg:gap-y-8",
-        className,
-      )}
+        className={cn(
+          // Avoid 5-up on tablet/laptop: cards were too narrow (sm: was forcing 5 cols from 640px).
+          // Max 3 columns on large screens so each chart card has more breathing room.
+          // Column/row gaps tuned so cards align cleanly without oversized vertical rhythm.
+          "grid grid-cols-1 gap-3.5 gap-y-4 pb-10 sm:grid-cols-2 sm:gap-x-4 sm:gap-y-5 lg:grid-cols-3 lg:gap-x-5 lg:gap-y-6",
+          className,
+        )}
       style={{ fontFamily: FONT }}
     >
       {children}
@@ -324,7 +328,7 @@ export function DashboardStatBarCard({
         sortMenu={sortMenu}
       />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col px-4 pb-5 pt-4">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col px-4 pb-3.5 pt-3">
         <MetricBarListBody
           sorted={sorted}
           scaleMax={scaleMax}
@@ -370,7 +374,7 @@ export function DashboardRequesterGridCard({
         sortMenu={null}
       />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col px-4 pb-5 pt-4">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col px-4 pb-3.5 pt-3">
         <MetricBarListBody
           sorted={sorted}
           scaleMax={scaleMax}

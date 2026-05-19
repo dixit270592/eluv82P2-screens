@@ -36,10 +36,9 @@ interface PurchaseRequestModalProps {
 
 type ModalView = 'header' | 'lineItem' | 'glSplit';
 
-const MODAL_FLOW_STEPS: { id: ModalView; label: string; caption: string }[] = [
+const MODAL_FLOW_STEPS: { id: Exclude<ModalView, 'glSplit'>; label: string; caption: string }[] = [
   { id: 'header', label: 'Header', caption: 'Request details' },
   { id: 'lineItem', label: 'Line item', caption: 'Item & costing' },
-  { id: 'glSplit', label: 'GL split', caption: 'Distribution' },
 ];
 
 /* ─── Constants ─── */
@@ -227,11 +226,23 @@ export function PurchaseRequestModal({ onClose, onComplete }: PurchaseRequestMod
     color: '#344054', fontFamily: F, marginBottom: '5px',
   };
 
-  const stepIndex = view === 'header' ? 0 : view === 'lineItem' ? 1 : 2;
+  /** GL distribution is edited from Line item (not a separate step in the strip) */
+  const stepIndex = view === 'header' ? 0 : 1;
 
   /** Single shell width avoids animating `width` (layout thrash) when switching views */
   const MODAL_SHELL_W = '720px';
-  const NARROW_FORM_MAX_W = '560px';
+  /** Horizontal inset inside the card (header, body, footer) */
+  const modalPadX = 18;
+  const modalPadYHeader = 18;
+  const modalPadYFooter = 12;
+
+  /** Align header, step strip, form body, and footer to one full-width track inside horizontal pad */
+  const contentColumn: React.CSSProperties = {
+    maxWidth: '100%',
+    width: '100%',
+    marginLeft: 'auto',
+    marginRight: 'auto',
+  };
 
   return (
     <motion.div
@@ -243,7 +254,7 @@ export function PurchaseRequestModal({ onClose, onComplete }: PurchaseRequestMod
         position: 'fixed', inset: 0,
         background: 'rgba(16,24,40,0.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 200, padding: '20px', backdropFilter: 'blur(2px)',
+        zIndex: 200, padding: '12px', backdropFilter: 'blur(2px)',
       }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
@@ -264,171 +275,207 @@ export function PurchaseRequestModal({ onClose, onComplete }: PurchaseRequestMod
           overflow: 'hidden',
         }}
       >
-        {/* ── Top bar ── */}
-        <div style={{ padding: '18px 22px 14px', borderBottom: '1px solid #EEF1F5', flexShrink: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#101828', fontFamily: F }}>
-                Add Purchase Request
-              </h2>
-              {view === 'header' && (
-                <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#667085', fontFamily: F }}>
-                  Fill out details to create a new purchase request.
-                </p>
-              )}
-              {(view === 'lineItem' || view === 'glSplit') && (
-                <div style={{ marginTop: '3px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#1FA97A', fontFamily: F }}>
-                    Add First Line Item
-                  </span>
-                  {view === 'glSplit' && (
-                    <>
-                      <br />
-                      <span style={{ fontSize: '12px', color: '#667085', fontFamily: F }}>GL Distribution</span>
-                    </>
-                  )}
-                  {view === 'lineItem' && (
-                    <>
-                      <br />
-                      <span style={{ fontSize: '12px', color: '#667085', fontFamily: F }}>
-                        Defaults set here will auto-populate for additional lines.
-                      </span>
-                    </>
-                  )}
-                </div>
-              )}
+        {/* ── Top bar (same width as form column) ── */}
+        <div
+          style={{
+            padding: `${modalPadYHeader}px ${modalPadX}px 14px`,
+            borderBottom: '1px solid #EEF1F5',
+            flexShrink: 0,
+          }}
+        >
+          <div style={contentColumn}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#101828', fontFamily: F }}>
+                  Add Purchase Request
+                </h2>
+                {view === 'header' && (
+                  <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#667085', fontFamily: F }}>
+                    Fill out details to create a new purchase request.
+                  </p>
+                )}
+                {(view === 'lineItem' || view === 'glSplit') && (
+                  <div style={{ marginTop: '3px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#1FA97A', fontFamily: F }}>
+                      Add First Line Item
+                    </span>
+                    {view === 'glSplit' && (
+                      <>
+                        <br />
+                        <span style={{ fontSize: '12px', color: '#667085', fontFamily: F }}>GL Distribution</span>
+                      </>
+                    )}
+                    {view === 'lineItem' && (
+                      <>
+                        <br />
+                        <span style={{ fontSize: '12px', color: '#667085', fontFamily: F }}>
+                          Defaults set here will auto-populate for additional lines.
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={onClose}
+                type="button"
+                style={{
+                  width: '28px', height: '28px', border: '1px solid #E4E7EC', borderRadius: '5px',
+                  background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', flexShrink: 0,
+                }}
+              >
+                <X size={13} color="#667085" strokeWidth={2.5} />
+              </button>
             </div>
-            <button
-              onClick={onClose}
-              style={{
-                width: '28px', height: '28px', border: '1px solid #E4E7EC', borderRadius: '5px',
-                background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', flexShrink: 0,
-              }}
-            >
-              <X size={13} color="#667085" strokeWidth={2.5} />
-            </button>
-          </div>
 
           <div
             role="group"
             aria-label="Purchase request steps"
             style={{
               marginTop: 16,
-              padding: 4,
-              borderRadius: 12,
-              background: '#F2F4F7',
+              padding: '14px 16px 16px',
+              borderRadius: 10,
+              background: 'linear-gradient(180deg, #FCFDFD 0%, #F4F6F9 100%)',
               border: '1px solid #E4E7EC',
+              boxShadow: '0 1px 2px rgba(16, 24, 40, 0.04)',
             }}
           >
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                gap: 8,
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: 12,
+                marginBottom: 14,
               }}
             >
               {MODAL_FLOW_STEPS.map((s, i) => {
-                const active = stepIndex === i;
+                const active =
+                  view === 'glSplit'
+                    ? s.id === 'lineItem'
+                    : stepIndex === i;
                 const complete = stepIndex > i;
                 return (
                   <div
                     key={s.id}
                     style={{
-                      padding: '10px 12px',
-                      borderRadius: 10,
-                      background: active ? '#FFFFFF' : complete ? '#ECFDF3' : 'transparent',
-                      border: active
-                        ? '1px solid #1FA97A'
-                        : complete
-                          ? '1px solid #A7F3D0'
-                          : '1px solid transparent',
-                      boxShadow: active ? '0 4px 14px rgba(16,24,40,0.06)' : 'none',
-                      transition: 'background 0.2s, border-color 0.2s',
+                      flex: 1,
+                      minWidth: 0,
+                      display: 'flex',
+                      gap: 10,
+                      alignItems: 'flex-start',
+                      padding: '2px 0 2px 11px',
+                      borderLeft: active ? '3px solid #1FA97A' : '3px solid transparent',
+                      transition: 'border-color 0.2s',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span
-                        aria-hidden
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 30,
+                        height: 30,
+                        borderRadius: 999,
+                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 12,
+                        fontWeight: 800,
+                        fontFamily: F,
+                        background: complete
+                          ? 'linear-gradient(145deg, #1FA97A, #16A37A)'
+                          : active
+                            ? 'linear-gradient(145deg, #0f172a, #1e293b)'
+                            : '#E8ECF0',
+                        color: complete || active ? '#FFFFFF' : '#64748B',
+                        boxShadow:
+                          complete || active
+                            ? '0 2px 8px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(255,255,255,0.08) inset'
+                            : '0 1px 2px rgba(16, 24, 40, 0.06) inset',
+                        transition: 'background 0.2s, box-shadow 0.2s, transform 0.2s',
+                        transform: active ? 'scale(1.02)' : 'none',
+                      }}
+                    >
+                      {complete ? <Check size={14} strokeWidth={2.5} /> : i + 1}
+                    </span>
+                    <div style={{ minWidth: 0, paddingTop: 1 }}>
+                      <div
                         style={{
-                          width: 24,
-                          height: 24,
-                          borderRadius: 8,
-                          flexShrink: 0,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: 11,
-                          fontWeight: 800,
+                          fontSize: 13,
+                          fontWeight: active ? 700 : complete ? 600 : 500,
+                          color: active || complete ? '#101828' : '#475467',
                           fontFamily: F,
-                          background: complete ? '#1FA97A' : active ? '#0f172a' : '#E4E7EC',
-                          color: complete || active ? '#FFFFFF' : '#667085',
+                          letterSpacing: '-0.02em',
+                          lineHeight: 1.3,
                         }}
                       >
-                        {complete ? <Check size={13} strokeWidth={2.5} /> : i + 1}
-                      </span>
-                      <div style={{ minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: 12,
-                            fontWeight: active ? 700 : 600,
-                            color: '#101828',
-                            fontFamily: F,
-                            letterSpacing: '-0.01em',
-                            lineHeight: 1.25,
-                          }}
-                        >
-                          {s.label}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 500,
-                            color: '#667085',
-                            fontFamily: F,
-                            marginTop: 2,
-                            lineHeight: 1.3,
-                          }}
-                        >
-                          {s.caption}
-                        </div>
+                        {s.label}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 500,
+                          color: complete && !active ? '#667085' : active ? '#344054' : '#98A2B3',
+                          fontFamily: F,
+                          marginTop: 3,
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {s.caption}
                       </div>
                     </div>
                   </div>
                 );
               })}
             </div>
+            {/* Segmented progress: one segment per step */}
             <div
               aria-hidden
               style={{
-                marginTop: 10,
-                marginLeft: 4,
-                marginRight: 4,
-                height: 3,
-                borderRadius: 999,
-                background: '#E4E7EC',
-                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
               }}
             >
-              <div
-                style={{
-                  height: '100%',
-                  width: `${((stepIndex + 1) / MODAL_FLOW_STEPS.length) * 100}%`,
-                  borderRadius: 999,
-                  background: 'linear-gradient(90deg, #1FA97A 0%, #34D399 100%)',
-                  transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
-                }}
-              />
+              {MODAL_FLOW_STEPS.map((s, i) => {
+                const onOrPast = stepIndex > i || stepIndex === i;
+                return (
+                  <div
+                    key={`seg-${s.id}`}
+                    style={{
+                      flex: 1,
+                      height: 5,
+                      borderRadius: 999,
+                      background: onOrPast
+                        ? 'linear-gradient(90deg, #1FA97A 0%, #2DD4A7 100%)'
+                        : '#E4E7EC',
+                      boxShadow: onOrPast
+                        ? '0 1px 2px rgba(31, 169, 122, 0.25), inset 0 1px 0 rgba(255,255,255,0.25)'
+                        : 'inset 0 1px 2px rgba(16, 24, 40, 0.06)',
+                      transition: 'background 0.35s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s',
+                    }}
+                    title={s.caption}
+                  />
+                );
+              })}
             </div>
+          </div>
           </div>
         </div>
 
         {/* ── Body ── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: view === 'glSplit' ? '0' : '18px 22px' }}>
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: view === 'glSplit' ? 0 : `${modalPadYHeader}px ${modalPadX}px`,
+          }}
+        >
           <AnimatePresence mode="wait">
             {view === 'header' && (
               <motion.div key="header" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-                <div style={{ maxWidth: NARROW_FORM_MAX_W, margin: '0 auto', width: '100%' }}>
+                <div style={contentColumn}>
                   <HeaderForm
                     {...{ description, setDescription, type, setType, vendor, setVendor, department, setDepartment, deliveryLocation, setDeliveryLocation, focused, setFocused, inp, sel, lbl }}
                     onAddLineItem={() => setView('lineItem')}
@@ -438,7 +485,7 @@ export function PurchaseRequestModal({ onClose, onComplete }: PurchaseRequestMod
             )}
             {view === 'lineItem' && (
               <motion.div key="lineItem" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-                <div style={{ maxWidth: NARROW_FORM_MAX_W, margin: '0 auto', width: '100%' }}>
+                <div style={contentColumn}>
                   <LineItemForm
                     {...{ itemDesc, setItemDesc, qty, setQty, unitCost, setUnitCost, showAdvanced, setShowAdvanced, appliedGLLabel, glApplied, focused, setFocused, inp, lbl }}
                     onEditGL={handleOpenGL}
@@ -464,27 +511,30 @@ export function PurchaseRequestModal({ onClose, onComplete }: PurchaseRequestMod
           </AnimatePresence>
         </div>
 
-        {/* ── Footer ── */}
+        {/* ── Footer (actions line up with form column) ── */}
         <div
           style={{
-            padding: '12px 22px', borderTop: '1px solid #EEF1F5',
-            display: 'flex', justifyContent: 'flex-end', gap: '10px',
-            background: '#FAFAFA', flexShrink: 0,
+            padding: `${modalPadYFooter}px ${modalPadX}px`,
+            borderTop: '1px solid #EEF1F5',
+            background: '#FAFAFA',
+            flexShrink: 0,
           }}
         >
-          <SecBtn onClick={onClose}>Cancel</SecBtn>
-          {view === 'header' && (
-            <PriBtn onClick={handleAddPR}>Add Purchase Request</PriBtn>
-          )}
-          {view === 'lineItem' && !glApplied && (
-            <PriBtn onClick={handleAddPR}>Add Line</PriBtn>
-          )}
-          {view === 'lineItem' && glApplied && (
-            <PriBtn onClick={handleAddPR}>Add Purchase Request</PriBtn>
-          )}
-          {view === 'glSplit' && (
-            <PriBtn onClick={handleApplyGL}>Apply</PriBtn>
-          )}
+          <div style={{ ...contentColumn, display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: '10px' }}>
+            <SecBtn onClick={onClose}>Cancel</SecBtn>
+            {view === 'header' && (
+              <PriBtn onClick={handleAddPR}>Add Purchase Request</PriBtn>
+            )}
+            {view === 'lineItem' && !glApplied && (
+              <PriBtn onClick={handleAddPR}>Add Line</PriBtn>
+            )}
+            {view === 'lineItem' && glApplied && (
+              <PriBtn onClick={handleAddPR}>Add Purchase Request</PriBtn>
+            )}
+            {view === 'glSplit' && (
+              <PriBtn onClick={handleApplyGL}>Apply</PriBtn>
+            )}
+          </div>
         </div>
       </motion.div>
     </motion.div>

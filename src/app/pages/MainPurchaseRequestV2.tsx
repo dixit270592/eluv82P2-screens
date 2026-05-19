@@ -13,6 +13,8 @@ import { SendForApprovalModal } from '../components/SendForApprovalModal';
 import { GLDistributionModal } from '../components/GLDistributionModal';
 import { PurchaseRequestHistoryPanel, type HistoryActivityItem, type HistoryStatus } from '../components/PurchaseRequestHistoryPanel';
 import { SkipToMainContent } from '../components/SkipToMainContent';
+import { PRWorkflowHeader } from '../components/pr-workflow';
+import type { PRStatus as WorkflowPRStatus, ViewRole } from '../types/prWorkflow';
 import { UI_FONT_STACK as F } from '../tokens/typography';
 const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -37,7 +39,9 @@ const DEFAULT_LINE_ITEMS: ExtendedLineItem[] = [
   { id: '3', item: 'Ted 3', vendor: '84 Lumber', quantity: 2, cost: 200.0, subtotal: 400.0, glAccount: '6200 - Software & Licenses', type: 'Goods', unitOfMeasure: 'Each', taxGroup: 'Standard', glAccountsCount: 1 },
 ];
 
-type PRStatus = 'unsubmitted' | 'awaiting_approval' | 'submitted' | 'approved' | 'rejected';
+type PRStatus = 'unsubmitted' | 'recalled' | 'awaiting_approval' | 'submitted' | 'approved' | 'rejected';
+
+const toWorkflowStatus = (status: PRStatus): WorkflowPRStatus => status as WorkflowPRStatus;
 
 const TABS = ['Items', 'RFQ', 'Purchase Order', 'Receipt'];
 
@@ -81,6 +85,8 @@ export function MainPurchaseRequestV2() {
     requiredBy: 'March-13-2026',
   });
   const [status, setStatus] = useState<PRStatus>('unsubmitted');
+  const [viewRole, setViewRole] = useState<ViewRole>('requester');
+  const [poCreated, setPoCreated] = useState(false);
   const [activeTab, setActiveTab] = useState('Items');
   const [modalOpen, setModalOpen] = useState(false);
   const [addItemModalOpen, setAddItemModalOpen] = useState(false);
@@ -152,7 +158,12 @@ export function MainPurchaseRequestV2() {
   const budgetPct = Math.min((subtotalAll / budgetTotal) * 100, 100);
   const daysRemaining = 45;
   const nextApprover = { name: 'David Connor', initials: 'DC' };
-
+  const nextAction = {
+    type: 'single' as const,
+    name: nextApprover.name,
+    initials: nextApprover.initials,
+    avatarBg: '#1A7A6E',
+  };
   const tabCounts: Record<string, number> = { Items: lineItems.length, RFQ: 0, 'Purchase Order': 1, Receipt: 0 };
 
   const appendHistoryActivity = (item: Omit<HistoryActivityItem, 'id' | 'time'>) => {
@@ -193,8 +204,8 @@ export function MainPurchaseRequestV2() {
     setSendApprovalModalOpen(true);
   };
 
-  const handleSendForApproval = (approvers: string[]) => {
-    setStatus('awaiting_approval');
+  const handleSendForApproval = (_approvers: string[]) => {
+    setStatus('submitted');
     addActivity('Submitted for approval', 'Purchase request submitted for approval', 'approvals', 'neutral');
     setSendApprovalModalOpen(false);
     showToast('Transaction sent for approval successfully', 'success');
@@ -216,11 +227,32 @@ export function MainPurchaseRequestV2() {
   };
 
   const confirmRecall = () => {
-    setStatus('unsubmitted');
+    setStatus('recalled');
     addActivity('Recalled from approval', 'Purchase request recalled from approval', 'approvals', 'neutral');
     setConfirmDialog({ type: null, show: false });
     showToast('Request recalled', 'info');
   };
+
+  const handleCopy = () => {
+    const newId = `PR-${Date.now()}`;
+    try {
+      const dataToSave = { lineItems, prHeader, headerFieldData };
+      localStorage.setItem(getStorageKey(newId), JSON.stringify(dataToSave));
+      navigate(`/pr/${newId}`, { state: { prHeader, lineItems } });
+      showToast('Request copied to new draft', 'success');
+    } catch {
+      showToast('Failed to copy request', 'error');
+    }
+  };
+
+  const handleCreatePO = () => {
+    setPoCreated(true);
+    showToast('Purchase order created', 'success');
+  };
+
+  const handleEmailPO = () => showToast('PO email sent', 'success');
+
+  const handleCreateChangeOrder = () => showToast('Change order created', 'info');
 
   const handleApprove = () => {
     setStatus('approved');
@@ -400,65 +432,30 @@ export function MainPurchaseRequestV2() {
               )}
             </AnimatePresence>
 
-            <button
-              type="button"
-              onClick={() => navigate('/')}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#667085', fontFamily: F, background: 'none', border: 'none', cursor: 'pointer', marginBottom: '16px', padding: '0', transition: 'color 0.15s' }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#1FA97A'; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#667085'; }}
-            >
-              <ArrowLeft size={14} strokeWidth={2} />
-              Back to Purchase Requests
-            </button>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', gap: '16px', flexWrap: 'wrap' }}>
-              <div style={{ minWidth: 0 }}>
-                <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#101828', fontFamily: F }}>Purchase Request</h1>
-                <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#667085', fontFamily: F, lineHeight: 1.4 }}>
-                  {prId}
-                  <span style={{ color: '#D0D5DD' }} aria-hidden> · </span>
-                  {headerFieldData.department}
-                  <span style={{ color: '#D0D5DD' }} aria-hidden> · </span>
-                  Needed by {headerFieldData.requiredBy}
-                </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '12px', color: '#667085', fontFamily: F, fontWeight: 500 }}>
-                    Request: {status === 'unsubmitted' ? 'Saved' : status === 'awaiting_approval' ? 'Awaiting approval' : status === 'submitted' ? 'Submitted' : status === 'approved' ? 'Approved' : 'Rejected'}
-                  </span>
-                  <div style={{ padding: '4px 10px', border: '1px solid #E4E7EC', borderRadius: '100px', background: '#FFFFFF', fontSize: '11px', fontWeight: 600, color: status === 'submitted' || status === 'awaiting_approval' ? '#D97706' : status === 'approved' ? '#1FA97A' : status === 'rejected' ? '#F04438' : '#667085', fontFamily: F }}>
-                    {status === 'unsubmitted' ? 'Unsubmitted' : status === 'awaiting_approval' ? 'Pending approval' : status === 'submitted' ? 'Submitted' : status === 'approved' ? 'Approved' : 'Rejected'}
-                  </div>
-                  {status === 'awaiting_approval' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#667085', fontFamily: F }}>
-                      <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'linear-gradient(135deg, #1FA97A 0%, #0E7A54 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', fontWeight: 700, color: '#FFFFFF', fontFamily: F }}>{nextApprover.initials}</div>
-                      <span>Next: {nextApprover.name}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
-                {status === 'unsubmitted' && (
-                  <>
-                    <Btn onClick={handleSave} icon={<Save size={12} strokeWidth={2} />} variant="blue">Save</Btn>
-                    <Btn onClick={handleSubmit} icon={<Send size={12} strokeWidth={2} />} variant="green">Submit for Approval</Btn>
-                    <Btn onClick={handleCancel} icon={<X size={12} strokeWidth={2.5} />} variant="gray">Cancel</Btn>
-                  </>
-                )}
-                {status === 'awaiting_approval' && (
-                  <>
-                    <Btn onClick={handleApprove} icon={<CheckCircle2 size={12} strokeWidth={2} />} variant="green">Approve</Btn>
-                    <Btn onClick={handleRequireChanges} icon={<AlertCircle size={12} strokeWidth={2} />} variant="amber">Require Changes</Btn>
-                    <Btn onClick={handleReject} icon={<X size={12} strokeWidth={2.5} />} variant="red">Reject</Btn>
-                  </>
-                )}
-                {(status === 'submitted' || status === 'approved') && (
-                  <>
-                    <Btn onClick={handleCancel} icon={<X size={12} strokeWidth={2.5} />} variant="gray">Cancel</Btn>
-                    <Btn onClick={handleRecall} icon={<RotateCcw size={12} strokeWidth={2} />} variant="amber">Recall</Btn>
-                  </>
-                )}
-              </div>
-            </div>
+            <PRWorkflowHeader
+              prId={prId}
+              department={headerFieldData.department}
+              requiredBy={headerFieldData.requiredBy}
+              status={toWorkflowStatus(status)}
+              viewRole={viewRole}
+              onViewRoleChange={setViewRole}
+              poCreated={poCreated}
+              nextAction={nextAction}
+              onBack={() => navigate('/purchase-requests')}
+              handlers={{
+                onSave: handleSave,
+                onSubmit: handleSubmit,
+                onCancel: handleCancel,
+                onRecall: handleRecall,
+                onCopy: handleCopy,
+                onApprove: handleApprove,
+                onReject: handleReject,
+                onRequireChange: handleRequireChanges,
+                onCreatePO: handleCreatePO,
+                onEmailPO: handleEmailPO,
+                onCreateChangeOrder: handleCreateChangeOrder,
+              }}
+            />
 
             {/* PR Details */}
             <div style={{ background: '#FFFFFF', border: '1px solid #E4E7EC', borderRadius: '10px', boxShadow: '0 1px 4px rgba(16,24,40,0.04)', marginBottom: '16px', overflow: 'hidden' }}>
@@ -1556,6 +1553,7 @@ function Btn({ onClick, icon, variant, disabled, children }: { onClick: () => vo
 
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
       style={{
