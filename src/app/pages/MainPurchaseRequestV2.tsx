@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Save, Send, X, Search, Settings, ChevronDown, Plus, Trash2, ArrowLeft,
   CheckCircle2, AlertCircle, MoreHorizontal, RefreshCw, Calendar, Clock, RotateCcw, Edit3, DollarSign, ExternalLink,
+  FilePlus, FileText,
 } from 'lucide-react';
 import { Sidebar } from '../components/Sidebar';
 import { TopHeader } from '../components/TopHeader';
@@ -13,9 +14,11 @@ import { SendForApprovalModal } from '../components/SendForApprovalModal';
 import { GLDistributionModal } from '../components/GLDistributionModal';
 import { PurchaseRequestHistoryPanel, type HistoryActivityItem, type HistoryStatus } from '../components/PurchaseRequestHistoryPanel';
 import { SkipToMainContent } from '../components/SkipToMainContent';
-import { PRWorkflowHeader } from '../components/pr-workflow';
+import { PRWorkflowHeader, WorkflowActionButton } from '../components/pr-workflow';
 import type { PRStatus as WorkflowPRStatus, ViewRole } from '../types/prWorkflow';
 import { UI_FONT_STACK as F } from '../tokens/typography';
+import { printTransaction } from '../utils/printTransaction';
+import { isStarred as checkStarred, toggleStarred } from '../utils/starredTransactions';
 const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const DEFAULT_HEADER: PRHeaderData = {
@@ -31,6 +34,15 @@ interface ExtendedLineItem extends LineItemData {
   unitOfMeasure?: string;
   taxGroup?: string;
   glAccountsCount?: number;
+}
+
+interface RFQRecord {
+  id: string;
+  status: 'draft' | 'sent' | 'closed';
+  vendors: number;
+  lineItems: number;
+  amount: number;
+  createdAt: string;
 }
 
 const DEFAULT_LINE_ITEMS: ExtendedLineItem[] = [
@@ -64,6 +76,7 @@ export function MainPurchaseRequestV2() {
           lineItems: parsed.lineItems || [],
           prHeader: parsed.prHeader || DEFAULT_HEADER,
           headerFieldData: parsed.headerFieldData || null,
+          rfqRecords: parsed.rfqRecords || [],
         };
       }
     } catch (e) {
@@ -75,6 +88,7 @@ export function MainPurchaseRequestV2() {
   const savedData = loadFromStorage();
 
   const [lineItems, setLineItems] = useState<ExtendedLineItem[]>(savedData?.lineItems || stateItems);
+  const [rfqRecords, setRfqRecords] = useState<RFQRecord[]>(savedData?.rfqRecords || []);
   const [prHeader, setPrHeader] = useState<PRHeaderData>(savedData?.prHeader || stateHeader);
   const [headerFieldData, setHeaderFieldData] = useState(savedData?.headerFieldData || {
     department: stateHeader.department,
@@ -102,6 +116,7 @@ export function MainPurchaseRequestV2() {
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [budgetPopupRow, setBudgetPopupRow] = useState<string | null>(null);
   const [budgetReportRow, setBudgetReportRow] = useState<string | null>(null);
+  const [isStarred, setIsStarred] = useState(() => checkStarred(prId));
   const [activityFeed, setActivityFeed] = useState<HistoryActivityItem[]>([
     {
       id: 'seed-1',
@@ -145,12 +160,17 @@ export function MainPurchaseRequestV2() {
         lineItems,
         prHeader,
         headerFieldData,
+        rfqRecords,
       };
       localStorage.setItem(getStorageKey(prId), JSON.stringify(dataToSave));
     } catch (e) {
       console.error('Failed to save to localStorage:', e);
     }
-  }, [lineItems, prHeader, headerFieldData, prId]);
+  }, [lineItems, prHeader, headerFieldData, rfqRecords, prId]);
+
+  useEffect(() => {
+    setIsStarred(checkStarred(prId));
+  }, [prId]);
 
   const subtotalAll = lineItems.reduce((s, i) => s + i.subtotal, 0);
   const budgetTotal = 11000;
@@ -164,7 +184,21 @@ export function MainPurchaseRequestV2() {
     initials: nextApprover.initials,
     avatarBg: '#1A7A6E',
   };
-  const tabCounts: Record<string, number> = { Items: lineItems.length, RFQ: 0, 'Purchase Order': 1, Receipt: 0 };
+  const tabCounts: Record<string, number> = {
+    Items: lineItems.length,
+    RFQ: rfqRecords.length,
+    'Purchase Order': poCreated ? 1 : 0,
+    Receipt: 0,
+  };
+
+  const statusLabels: Record<PRStatus, string> = {
+    unsubmitted: 'Draft',
+    recalled: 'Recalled',
+    awaiting_approval: 'Awaiting Approval',
+    submitted: 'Pending Approval',
+    approved: 'Approved',
+    rejected: 'Rejected',
+  };
 
   const appendHistoryActivity = (item: Omit<HistoryActivityItem, 'id' | 'time'>) => {
     const now = new Date();
@@ -253,6 +287,61 @@ export function MainPurchaseRequestV2() {
   const handleEmailPO = () => showToast('PO email sent', 'success');
 
   const handleCreateChangeOrder = () => showToast('Change order created', 'info');
+
+  const handlePrint = () => {
+    printTransaction({
+      prId,
+      department: headerFieldData.department,
+      requiredBy: headerFieldData.requiredBy,
+      status: statusLabels[status],
+      description: headerFieldData.description,
+      vendor: headerFieldData.vendor,
+      deliveryLocation: headerFieldData.deliveryLocation,
+      lineItems: lineItems.map((item) => ({
+        description: item.item,
+        vendor: item.vendor,
+        quantity: item.quantity,
+        cost: item.cost,
+        subtotal: item.subtotal,
+      })),
+      total: subtotalAll,
+    });
+    addActivity('Transaction printed', `Printed ${prId}`, 'data_entry', 'neutral');
+    showToast('Opening print preview…', 'info');
+  };
+
+  const handleToggleStar = () => {
+    const starred = toggleStarred(prId);
+    setIsStarred(starred);
+    addActivity(
+      starred ? 'Transaction starred' : 'Star removed',
+      starred ? `${prId} added to starred` : `${prId} removed from starred`,
+      'data_entry',
+      'neutral',
+    );
+    showToast(starred ? 'Transaction starred' : 'Star removed', starred ? 'success' : 'info');
+  };
+
+  const handleCreateRFQ = () => {
+    if (lineItems.length === 0) {
+      showToast('Add at least one line item before creating an RFQ', 'error');
+      return;
+    }
+    const rfqId = `RFQ-${new Date().getFullYear()}-${String(rfqRecords.length + 1).padStart(3, '0')}`;
+    const uniqueVendors = new Set(lineItems.map((item) => item.vendor).filter(Boolean));
+    const newRfq: RFQRecord = {
+      id: rfqId,
+      status: 'draft',
+      vendors: Math.max(uniqueVendors.size, 1),
+      lineItems: lineItems.length,
+      amount: subtotalAll,
+      createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    };
+    setRfqRecords((prev) => [...prev, newRfq]);
+    setActiveTab('RFQ');
+    addActivity('RFQ created', `${rfqId} created from ${lineItems.length} line item(s)`, 'data_entry', 'success');
+    showToast(`${rfqId} created successfully`, 'success');
+  };
 
   const handleApprove = () => {
     setStatus('approved');
@@ -442,6 +531,7 @@ export function MainPurchaseRequestV2() {
               poCreated={poCreated}
               nextAction={nextAction}
               onBack={() => navigate('/purchase-requests')}
+              isStarred={isStarred}
               handlers={{
                 onSave: handleSave,
                 onSubmit: handleSubmit,
@@ -454,6 +544,8 @@ export function MainPurchaseRequestV2() {
                 onCreatePO: handleCreatePO,
                 onEmailPO: handleEmailPO,
                 onCreateChangeOrder: handleCreateChangeOrder,
+                onPrint: handlePrint,
+                onToggleStar: handleToggleStar,
               }}
             />
 
@@ -806,7 +898,74 @@ export function MainPurchaseRequestV2() {
               </div>
             )}
 
-            {activeTab !== 'Items' && (
+            {activeTab === 'RFQ' && (
+              <div style={{ overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #EEF1F5', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ flex: 1 }} />
+                  <WorkflowActionButton onClick={handleCreateRFQ} icon={<FilePlus size={12} strokeWidth={2} />} variant="green">
+                    Create RFQ
+                  </WorkflowActionButton>
+                </div>
+
+                {rfqRecords.length === 0 ? (
+                  <div style={{ padding: '56px 24px', textAlign: 'center' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#F2F4F7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                      <FileText size={22} color="#98A2B3" strokeWidth={1.8} />
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#344054', fontFamily: F, marginBottom: '6px' }}>No RFQs yet</div>
+                    <div style={{ fontSize: '13px', color: '#98A2B3', fontFamily: F, marginBottom: '20px', maxWidth: '320px', margin: '0 auto 20px' }}>
+                      Create a request for quote to send line items to vendors for pricing.
+                    </div>
+                    <WorkflowActionButton onClick={handleCreateRFQ} icon={<FilePlus size={12} strokeWidth={2} />} variant="green">
+                      Create RFQ
+                    </WorkflowActionButton>
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '720px' }}>
+                      <thead>
+                        <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E4E7EC' }}>
+                          {['RFQ Number', 'Status', 'Vendors', 'Line Items', 'Amount', 'Created', ''].map((label) => (
+                            <th key={label} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: '#667085', fontFamily: F, letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>
+                              {label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rfqRecords.map((rfq) => (
+                          <tr key={rfq.id} style={{ borderBottom: '1px solid #F2F4F7' }}>
+                            <td style={{ padding: '14px 16px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 700, color: '#101828', fontFamily: F }}>{rfq.id}</span>
+                            </td>
+                            <td style={{ padding: '14px 16px' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 600, color: '#667085', fontFamily: F, background: '#F2F4F7', padding: '3px 8px', borderRadius: '12px', textTransform: 'capitalize' }}>
+                                {rfq.status}
+                              </span>
+                            </td>
+                            <td style={{ padding: '14px 16px', fontSize: '13px', color: '#344054', fontFamily: F }}>{rfq.vendors}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '13px', color: '#344054', fontFamily: F }}>{rfq.lineItems}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '13px', fontWeight: 700, color: '#101828', fontFamily: F }}>{fmt(rfq.amount)}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '12px', color: '#667085', fontFamily: F }}>{rfq.createdAt}</td>
+                            <td style={{ padding: '14px 16px' }}>
+                              <button
+                                type="button"
+                                onClick={() => showToast(`${rfq.id} opened`, 'info')}
+                                style={{ height: '28px', padding: '0 10px', border: '1px solid #E4E7EC', borderRadius: '5px', background: '#FFFFFF', fontSize: '12px', fontWeight: 500, color: '#344054', fontFamily: F, cursor: 'pointer' }}
+                              >
+                                View
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab !== 'Items' && activeTab !== 'RFQ' && (
               <div style={{ padding: '56px 24px', textAlign: 'center' }}>
                 <span style={{ fontSize: '13px', color: '#98A2B3', fontFamily: F }}>{activeTab} — No records yet</span>
               </div>

@@ -25,6 +25,7 @@ interface PRWorkflowHeaderProps {
   nextAction: NextActionInfo;
   onBack: () => void;
   handlers: WorkflowActionHandlers;
+  isStarred?: boolean;
 }
 
 export function PRWorkflowHeader({
@@ -38,6 +39,7 @@ export function PRWorkflowHeader({
   nextAction,
   onBack,
   handlers,
+  isStarred = false,
 }: PRWorkflowHeaderProps) {
   const isCancelled = status === 'cancelled';
   const inlineLabel = getInlineStatusLabel(status, viewRole);
@@ -173,6 +175,7 @@ export function PRWorkflowHeader({
             onViewRoleChange={onViewRoleChange}
             poCreated={poCreated}
             handlers={handlers}
+            isStarred={isStarred}
             actionsOnly
           />
         </div>

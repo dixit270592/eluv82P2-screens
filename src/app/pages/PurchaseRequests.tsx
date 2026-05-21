@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Search,
@@ -12,12 +12,14 @@ import {
   Filter,
   ArrowUpRight,
   ExternalLink,
+  Star,
 } from "lucide-react";
 import { Sidebar } from "../components/Sidebar";
 import { TopHeader } from "../components/TopHeader";
 import { PurchaseRequestModal, LineItemData, PRHeaderData } from "../components/PurchaseRequestModal";
 import { SkipToMainContent } from "../components/SkipToMainContent";
 import { UI_FONT_STACK as F } from "../tokens/typography";
+import { getStarredIds, toggleStarred } from "../utils/starredTransactions";
 
 interface PR {
   id: string;
@@ -185,11 +187,24 @@ const fmt = (n: number) =>
 
 export function PurchaseRequests() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [starredOnly, setStarredOnly] = useState(false);
+  const [starredIds, setStarredIds] = useState<Set<string>>(() => getStarredIds());
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [paymentPopupOpen, setPaymentPopupOpen] = useState<string | null>(null);
+
+  useEffect(() => {
+    setStarredIds(getStarredIds());
+  }, [location.key]);
+
+  const handleToggleStar = (prId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleStarred(prId);
+    setStarredIds(getStarredIds());
+  };
 
   const filtered = allPRs.filter((pr) => {
     const matchSearch =
@@ -198,7 +213,8 @@ export function PurchaseRequests() {
       pr.vendor.toLowerCase().includes(search.toLowerCase()) ||
       pr.department.toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === "all" || pr.status === filterStatus;
-    return matchSearch && matchStatus;
+    const matchStarred = !starredOnly || starredIds.has(pr.id);
+    return matchSearch && matchStatus && matchStarred;
   });
 
   const handleModalComplete = (data: {
@@ -496,6 +512,33 @@ export function PurchaseRequests() {
 
                 <button
                   type="button"
+                  onClick={() => setStarredOnly((prev) => !prev)}
+                  style={{
+                    height: "34px",
+                    padding: "0 14px",
+                    border: starredOnly ? "1.5px solid #FDE68A" : "1.5px solid #D0D5DD",
+                    borderRadius: "6px",
+                    fontSize: "13px",
+                    fontFamily: F,
+                    color: starredOnly ? "#B45309" : "#344054",
+                    background: starredOnly ? "#FFFBEB" : "#FFFFFF",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <Star
+                    size={13}
+                    strokeWidth={2}
+                    fill={starredOnly ? "#F59E0B" : "none"}
+                    color={starredOnly ? "#D97706" : "#667085"}
+                  />
+                  Starred
+                </button>
+
+                <button
+                  type="button"
                   style={{
                     height: "34px",
                     padding: "0 14px",
@@ -569,6 +612,7 @@ export function PurchaseRequests() {
                   {filtered.map((pr, idx) => {
                     const sc = statusConfig[pr.status];
                     const isHov = hoveredRow === pr.id;
+                    const isPrStarred = starredIds.has(pr.id);
                     return (
                       <motion.tr
                         className="pr-data-row"
@@ -630,6 +674,15 @@ export function PurchaseRequests() {
                             >
                               {pr.id}
                             </span>
+                            {isPrStarred && (
+                              <Star
+                                size={12}
+                                strokeWidth={2}
+                                fill="#F59E0B"
+                                color="#D97706"
+                                aria-label="Starred"
+                              />
+                            )}
                           </div>
                         </td>
 
@@ -789,6 +842,31 @@ export function PurchaseRequests() {
                               gap: "8px",
                             }}
                           >
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleStar(pr.id, e)}
+                              aria-label={isPrStarred ? "Remove star" : "Star transaction"}
+                              aria-pressed={isPrStarred}
+                              style={{
+                                width: "28px",
+                                height: "28px",
+                                borderRadius: "5px",
+                                border: isPrStarred ? "1px solid #FDE68A" : "1px solid #E4E7EC",
+                                background: isPrStarred ? "#FFFBEB" : "#FFFFFF",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                cursor: "pointer",
+                                transition: "background 0.15s, border-color 0.15s",
+                              }}
+                            >
+                              <Star
+                                size={13}
+                                strokeWidth={2}
+                                fill={isPrStarred ? "#F59E0B" : "none"}
+                                color={isPrStarred ? "#D97706" : "#98A2B3"}
+                              />
+                            </button>
                             <button
                               type="button"
                               className="pr-view-btn"

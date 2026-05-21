@@ -3,6 +3,8 @@ import { UI_FONT_STACK as F } from '../../tokens/typography';
 import type { PRStatus, ViewRole } from '../../types/prWorkflow';
 import { isEditableStatus, isInApprovalStatus } from '../../types/prWorkflow';
 import { CopyButton } from './CopyButton';
+import { PrintButton } from './PrintButton';
+import { StarButton } from './StarButton';
 import { WorkflowActionButton } from './WorkflowActionButton';
 import { ApprovalActions } from './ApprovalActions';
 import type { WorkflowActionHandlers } from './WorkflowActionBar.types';
@@ -16,6 +18,7 @@ interface WorkflowActionBarProps {
   onViewRoleChange: (role: ViewRole) => void;
   poCreated: boolean;
   handlers: WorkflowActionHandlers;
+  isStarred?: boolean;
   /** When true, only renders action buttons (no role switcher chrome) */
   actionsOnly?: boolean;
 }
@@ -129,12 +132,22 @@ function renderApproverInApprovalActions(handlers: WorkflowActionHandlers) {
   );
 }
 
+function renderUtilityActions(handlers: WorkflowActionHandlers, isStarred: boolean) {
+  return (
+    <>
+      <PrintButton onClick={handlers.onPrint} />
+      <StarButton onClick={handlers.onToggleStar} active={isStarred} />
+    </>
+  );
+}
+
 export function WorkflowActionBar({
   status,
   viewRole,
   onViewRoleChange,
   poCreated,
   handlers,
+  isStarred = false,
   actionsOnly = false,
 }: WorkflowActionBarProps) {
   const isCancelled = status === 'cancelled';
@@ -198,7 +211,9 @@ export function WorkflowActionBar({
         ? renderPOCreatorActions()
         : renderRequesterActions();
 
-  const actionButtons = actions ? (
+  const utilityActions = renderUtilityActions(handlers, isStarred);
+
+  const actionButtons = (
     <div
       style={{
         display: 'flex',
@@ -209,14 +224,15 @@ export function WorkflowActionBar({
       }}
     >
       {actions}
+      {utilityActions}
     </div>
-  ) : null;
+  );
 
   if (actionsOnly) {
     return actionButtons;
   }
 
-  const hasActions = Boolean(actions);
+  const hasWorkflowActions = Boolean(actions);
 
   return (
     <div
@@ -232,22 +248,21 @@ export function WorkflowActionBar({
         opacity: isCancelled ? 0.85 : 1,
       }}
     >
-      {hasActions && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: WF.actionGap,
-            flexWrap: 'wrap',
-            flex: '1 1 auto',
-            minWidth: 0,
-          }}
-        >
-          {actions}
-        </div>
-      )}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: WF.actionGap,
+          flexWrap: 'wrap',
+          flex: '1 1 auto',
+          minWidth: 0,
+        }}
+      >
+        {actions}
+        {utilityActions}
+      </div>
 
-      {!hasActions && isCancelled && (
+      {!hasWorkflowActions && isCancelled && (
         <span style={{ fontSize: '11px', color: '#98A2B3', fontFamily: F, flex: 1 }}>
           No workflow actions available
         </span>
@@ -257,7 +272,7 @@ export function WorkflowActionBar({
         style={{
           display: 'flex',
           alignItems: 'center',
-          marginLeft: hasActions ? 'auto' : 0,
+          marginLeft: 'auto',
           flexShrink: 0,
         }}
       >

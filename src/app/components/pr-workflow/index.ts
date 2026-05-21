@@ -1,5 +1,7 @@
 export { StatusBadge } from './StatusBadge';
 export { CopyButton } from './CopyButton';
+export { PrintButton } from './PrintButton';
+export { StarButton } from './StarButton';
 export { WorkflowActionButton } from './WorkflowActionButton';
 export { ApprovalActions } from './ApprovalActions';
 export { NextActionPanel } from './NextActionPanel';
