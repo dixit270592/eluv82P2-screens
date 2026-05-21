@@ -3,11 +3,12 @@
 # One-time setup in the repo:
 #   Settings → Pages → Build and deployment → Source: GitHub Actions
 #
-# Shareable client URL (replace OWNER and REPO):
-#   https://OWNER.github.io/REPO/presentation
+# Shareable client URLs:
+#   Project site:  https://OWNER.github.io/REPO/presentation
+#   Org/user site: https://eluv82p2-screens.github.io/presentation  (no personal username)
 #
-# If this repository is USERNAME.github.io (user/org site), set VITE_BASE_PATH to /
-# in the Build step env below instead of /${{ github.event.repository.name }}/
+# To drop "dixit270592." from the URL, create org "eluv82p2-screens" and run:
+#   powershell -File scripts/migrate-org-pages.ps1
 
 name: Deploy GitHub Pages
 
@@ -46,8 +47,8 @@ jobs:
 
       - name: Build
         env:
-          # Project site: app is served from https://<user>.github.io/<repo>/
-          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          # Org/user site (OWNER.github.io repo) serves from domain root; project sites use /REPO/.
+          VITE_BASE_PATH: ${{ github.event.repository.name == format('{0}.github.io', github.repository_owner) && '/' || format('/{0}/', github.event.repository.name) }}
         run: npm run build
 
       - name: Verify build output
