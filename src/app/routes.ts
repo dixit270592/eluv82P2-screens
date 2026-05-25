@@ -4,6 +4,7 @@ import { PurchaseRequests } from './pages/PurchaseRequests';
 import { MainPurchaseRequest } from './pages/MainPurchaseRequest';
 import { ClientPresentation } from './pages/ClientPresentation';
 import { UploadSplit } from './pages/UploadSplit';
+import { RootLayout } from './RootLayout';
 
 /** Must match Vite `base` (GitHub project site: /repo-name/ → basename /repo-name). */
 function routerBasename(): string | undefined {
@@ -15,28 +16,33 @@ function routerBasename(): string | undefined {
 export const router = createBrowserRouter(
 [
   {
-    path: '/presentation',
-    Component: ClientPresentation,
-  },
-  {
-    path: '/upload-split',
-    Component: UploadSplit,
-  },
-  {
-    path: '/',
-    Component: Dashboard,
-  },
-  {
-    path: '/purchase-requests',
-    Component: PurchaseRequests,
-  },
-  {
-    path: '/pr/:prId',
-    Component: MainPurchaseRequest,
-  },
-  {
-    path: '*',
-    Component: Dashboard,
+    Component: RootLayout,
+    children: [
+      {
+        path: '/presentation',
+        Component: ClientPresentation,
+      },
+      {
+        path: '/upload-split',
+        Component: UploadSplit,
+      },
+      {
+        path: '/',
+        Component: Dashboard,
+      },
+      {
+        path: '/purchase-requests',
+        Component: PurchaseRequests,
+      },
+      {
+        path: '/pr/:prId',
+        Component: MainPurchaseRequest,
+      },
+      {
+        path: '*',
+        Component: Dashboard,
+      },
+    ],
   },
 ],
 { basename: routerBasename() },
