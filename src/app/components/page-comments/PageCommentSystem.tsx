@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from 'react-router';
 import {
   Check,
   Download,
+  MessageSquare,
+  MessageSquareOff,
   MessageSquarePlus,
   Trash2,
   Upload,
@@ -541,16 +543,22 @@ export function PageCommentSystem() {
           <button
             type="button"
             onClick={() => setEnabled((v) => !v)}
-            className="rounded-full border bg-white px-3 py-2 text-xs font-medium shadow-lg transition-colors hover:bg-gray-50"
+            aria-label={enabled ? 'Comments on' : 'Comments off'}
+            title={enabled ? 'Comments on — click to hide pins' : 'Comments off — click to enable pins'}
+            className="flex size-10 items-center justify-center rounded-full border bg-white shadow-lg transition-colors hover:bg-gray-50"
             style={{ color: enabled ? P2P_BRAND.primaryStrong : '#64748B' }}
           >
-            {enabled ? 'Comments on' : 'Comments off'}
+            {enabled ? <MessageSquare className="size-4" /> : <MessageSquareOff className="size-4" />}
           </button>
           <button
             type="button"
             onClick={() => setPanelOpen(true)}
-            className="relative flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition-transform hover:scale-105"
-            style={{ background: P2P_BRAND.primary }}
+            className="relative flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium shadow-lg transition-colors hover:opacity-90"
+            style={{
+              background: P2P_BRAND.surface,
+              borderColor: P2P_BRAND.surfaceBorder,
+              color: P2P_BRAND.primaryStrong,
+            }}
           >
             <MessageSquarePlus className="size-4" />
             Feedback
