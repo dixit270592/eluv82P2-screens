@@ -51,6 +51,10 @@ const DEFAULT_LINE_ITEMS: ExtendedLineItem[] = [
   { id: '3', item: 'Ted 3', vendor: '84 Lumber', quantity: 2, cost: 200.0, subtotal: 400.0, glAccount: '6200 - Software & Licenses', type: 'Goods', unitOfMeasure: 'Each', taxGroup: 'Standard', glAccountsCount: 1 },
 ];
 
+/** Rows with a description count toward submit / RFQ validation. */
+const hasValidLineItems = (items: ExtendedLineItem[]) =>
+  items.some((i) => Boolean(i.item?.trim()) && i.id !== 'blank-row');
+
 type PRStatus = 'unsubmitted' | 'recalled' | 'awaiting_approval' | 'submitted' | 'approved' | 'rejected';
 
 const toWorkflowStatus = (status: PRStatus): WorkflowPRStatus => status as WorkflowPRStatus;
@@ -65,8 +69,8 @@ export function MainPurchaseRequestV2() {
   const stateHeader: PRHeaderData = location.state?.prHeader || DEFAULT_HEADER;
   const stateItems: ExtendedLineItem[] = location.state?.lineItems || [];
 
-  // Load from localStorage
-  const getStorageKey = (id: string) => `pr-data-${id}`;
+  // v2 key ignores older saves that persisted empty demo line items
+  const getStorageKey = (id: string) => `pr-data-v2-${id}`;
   const loadFromStorage = () => {
     try {
       const saved = localStorage.getItem(getStorageKey(prId));
@@ -89,8 +93,10 @@ export function MainPurchaseRequestV2() {
   const cameFromCreation = Boolean(location.state?.prHeader);
 
   const getInitialLineItems = (): ExtendedLineItem[] => {
-    if (savedData !== null) return savedData.lineItems;
-    if (stateItems.length > 0) return stateItems;
+    if (savedData?.lineItems && hasValidLineItems(savedData.lineItems)) {
+      return savedData.lineItems;
+    }
+    if (hasValidLineItems(stateItems)) return stateItems;
     if (cameFromCreation) return stateItems;
     return DEFAULT_LINE_ITEMS;
   };
@@ -242,7 +248,7 @@ export function MainPurchaseRequestV2() {
   };
 
   const handleSubmit = () => {
-    if (lineItems.length === 0) { showToast('Add at least one line item', 'error'); return; }
+    if (!hasValidLineItems(lineItems)) { showToast('Add at least one line item', 'error'); return; }
     setSendApprovalModalOpen(true);
   };
 
@@ -331,7 +337,7 @@ export function MainPurchaseRequestV2() {
   };
 
   const handleCreateRFQ = () => {
-    if (lineItems.length === 0) {
+    if (!hasValidLineItems(lineItems)) {
       showToast('Add at least one line item before creating an RFQ', 'error');
       return;
     }
