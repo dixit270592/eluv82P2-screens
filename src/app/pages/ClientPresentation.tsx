@@ -38,8 +38,8 @@ const PRESENTATION_SECTIONS: {
     title: 'Purchase requests list',
     summary: 'List experience, filters, and navigation into request detail.',
     updates: [
-      'Document table or filter behavior updates here.',
-      'Call out any new columns, sorting, or status treatment.',
+      'Starred filter, status chips, and row navigation into PR detail.',
+      'New Request modal creates a PR and routes to /pr/:id with header state.',
     ],
     path: '/purchase-requests',
     demoLabel: 'Open list',
@@ -49,8 +49,8 @@ const PRESENTATION_SECTIONS: {
     title: 'Purchase request detail',
     summary: 'Full PR workspace (header, lines, actions) — primary workflow surface.',
     updates: [
-      'Summarize line-item, approval, or header field changes.',
-      'Note any modal, validation, or status flow updates.',
+      'PR workflow header with role preview (requester, approver, PO), print, and star.',
+      'Line items, RFQ tab, history panel, localStorage persistence, and approval actions.',
     ],
     path: '/pr/PR-26016-774',
     demoLabel: 'Open sample PR',

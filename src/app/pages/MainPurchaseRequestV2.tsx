@@ -86,8 +86,16 @@ export function MainPurchaseRequestV2() {
   };
 
   const savedData = loadFromStorage();
+  const cameFromCreation = Boolean(location.state?.prHeader);
 
-  const [lineItems, setLineItems] = useState<ExtendedLineItem[]>(savedData?.lineItems || stateItems);
+  const getInitialLineItems = (): ExtendedLineItem[] => {
+    if (savedData !== null) return savedData.lineItems;
+    if (stateItems.length > 0) return stateItems;
+    if (cameFromCreation) return stateItems;
+    return DEFAULT_LINE_ITEMS;
+  };
+
+  const [lineItems, setLineItems] = useState<ExtendedLineItem[]>(getInitialLineItems);
   const [rfqRecords, setRfqRecords] = useState<RFQRecord[]>(savedData?.rfqRecords || []);
   const [prHeader, setPrHeader] = useState<PRHeaderData>(savedData?.prHeader || stateHeader);
   const [headerFieldData, setHeaderFieldData] = useState(savedData?.headerFieldData || {
@@ -718,11 +726,6 @@ export function MainPurchaseRequestV2() {
                     <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search items..." style={{ border: 'none', background: 'transparent', fontSize: '12px', color: '#101828', fontFamily: F, outline: 'none', flex: 1 }} />
                   </div>
                   <div style={{ flex: 1 }} />
-                  {lineItems.length === 0 ? (
-                    null
-                  ) : (
-                    null
-                  )}
                   <button onClick={() => setModalOpen(true)} style={{ height: '32px', padding: '0 14px', background: '#FFFFFF', border: '1.5px solid #D0D5DD', borderRadius: '5px', fontSize: '12px', fontWeight: 600, color: '#344054', fontFamily: F, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', transition: 'all 0.15s' }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#F0FDF9'; (e.currentTarget as HTMLElement).style.borderColor = '#1FA97A'; (e.currentTarget as HTMLElement).style.color = '#1FA97A'; }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = '#FFFFFF'; (e.currentTarget as HTMLElement).style.borderColor = '#D0D5DD'; (e.currentTarget as HTMLElement).style.color = '#344054'; }}
