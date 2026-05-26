@@ -21,6 +21,7 @@ import type { LucideIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import logoSvg from '../../imports/Eluv8P2P-final-logo.svg';
 import { UI_FONT_STACK as F } from '../tokens/typography';
+import { useAuth } from '../context/AuthContext';
 
 interface TopHeaderProps {
   onNewRequest?: () => void;
@@ -90,6 +91,7 @@ const panelStyle: CSSProperties = {
 
 export function TopHeader({ onNewRequest, prId }: TopHeaderProps) {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [dropOpen, setDropOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -638,12 +640,44 @@ export function TopHeader({ onNewRequest, prId }: TopHeaderProps) {
                 aria-label="Account"
                 style={panelStyle}
               >
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <LogOut size={16} color="#667085" style={{ marginTop: 2, flexShrink: 0 }} aria-hidden />
-                  <p style={{ margin: 0, fontSize: 12, color: '#475467', lineHeight: 1.45 }}>
-                    Profile and sign-in options will be connected here when authentication is available.
+                <div style={{ marginBottom: 10 }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#101828' }}>
+                    {user?.name ?? 'Signed in'}
                   </p>
+                  <p style={{ margin: '4px 0 0', fontSize: 12, color: '#667085', lineHeight: 1.4 }}>
+                    {user?.email}
+                  </p>
+                  {user?.department ? (
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#98A2B3' }}>{user.department}</p>
+                  ) : null}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    logout();
+                    setAccountOpen(false);
+                    navigate('/login');
+                  }}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    padding: '8px 12px',
+                    border: '1px solid #E4E7EC',
+                    borderRadius: '6px',
+                    background: '#FFFFFF',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: '#344054',
+                    cursor: 'pointer',
+                    fontFamily: F,
+                  }}
+                >
+                  <LogOut size={14} color="#667085" aria-hidden />
+                  Sign out
+                </button>
               </motion.div>
             )}
           </AnimatePresence>

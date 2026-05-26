@@ -5,6 +5,12 @@ import { MainPurchaseRequest } from './pages/MainPurchaseRequest';
 import { ClientPresentation } from './pages/ClientPresentation';
 import { UploadSplit } from './pages/UploadSplit';
 import { RootLayout } from './RootLayout';
+import { RequireAuth } from './components/auth/RequireAuth';
+import { GuestRoute } from './components/auth/GuestRoute';
+import { Login } from './pages/auth/Login';
+import { SignUp } from './pages/auth/SignUp';
+import { ForgotPassword } from './pages/auth/ForgotPassword';
+import { RedirectHome } from './components/auth/RedirectHome';
 
 /** Must match Vite `base` (GitHub project site: /repo-name/ → basename /repo-name). */
 function routerBasename(): string | undefined {
@@ -19,6 +25,14 @@ export const router = createBrowserRouter(
     Component: RootLayout,
     children: [
       {
+        Component: GuestRoute,
+        children: [
+          { path: '/login', Component: Login },
+          { path: '/signup', Component: SignUp },
+          { path: '/forgot-password', Component: ForgotPassword },
+        ],
+      },
+      {
         path: '/presentation',
         Component: ClientPresentation,
       },
@@ -27,20 +41,25 @@ export const router = createBrowserRouter(
         Component: UploadSplit,
       },
       {
-        path: '/',
-        Component: Dashboard,
-      },
-      {
-        path: '/purchase-requests',
-        Component: PurchaseRequests,
-      },
-      {
-        path: '/pr/:prId',
-        Component: MainPurchaseRequest,
+        Component: RequireAuth,
+        children: [
+          {
+            path: '/',
+            Component: Dashboard,
+          },
+          {
+            path: '/purchase-requests',
+            Component: PurchaseRequests,
+          },
+          {
+            path: '/pr/:prId',
+            Component: MainPurchaseRequest,
+          },
+        ],
       },
       {
         path: '*',
-        Component: Dashboard,
+        Component: RedirectHome,
       },
     ],
   },
