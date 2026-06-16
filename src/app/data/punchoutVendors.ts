@@ -3,16 +3,22 @@
  * Example: const res = await fetch('/api/punchout/vendors'); return res.json();
  */
 
+import { PUNCHOUT_VENDOR_LOGOS } from "../../assets/punchout";
+
 export interface PunchoutVendor {
   id: string;
   /** Display name in modal header and card */
   name: string;
   /** Shown under logo on card; falls back to `name` */
   cardLabel?: string;
-  /** Optional logo image URL from your CDN or vendor */
+  /** Bundled logo image URL */
   logoUrl?: string | null;
   /** Used for accessible text and initials fallback */
   initials?: string;
+  /** Brand accent for avatar ring / initials */
+  accent?: string;
+  /** How the logo fills the avatar circle */
+  logoFit?: "contain" | "cover";
   /** Short body copy for the punchout modal */
   summary?: string;
   /** Optional deep link or punchout launch URL (wired when integration exists) */
@@ -24,8 +30,10 @@ export const PUNCHOUT_VENDORS: PunchoutVendor[] = [
     id: "amazon-business",
     name: "Amazon Business",
     cardLabel: "Amazon",
-    logoUrl: "https://logo.clearbit.com/amazon.com",
+    logoUrl: PUNCHOUT_VENDOR_LOGOS.amazon,
     initials: "AB",
+    accent: "#FF9900",
+    logoFit: "contain",
     summary:
       "Shop your approved Amazon Business catalog. Items and pricing follow your organization's punchout agreement.",
     punchoutUrl: "#punchout-amazon",
@@ -33,8 +41,10 @@ export const PUNCHOUT_VENDORS: PunchoutVendor[] = [
   {
     id: "grainger",
     name: "Grainger",
-    logoUrl: "https://logo.clearbit.com/grainger.com",
+    logoUrl: PUNCHOUT_VENDOR_LOGOS.grainger,
     initials: "G",
+    accent: "#C8102E",
+    logoFit: "cover",
     summary:
       "Browse Grainger industrial supply through punchout. Your cart will return to this application for approval.",
     punchoutUrl: "#punchout-grainger",
@@ -43,8 +53,10 @@ export const PUNCHOUT_VENDORS: PunchoutVendor[] = [
     id: "staples-advantage",
     name: "Staples Advantage",
     cardLabel: "Staples",
-    logoUrl: "https://logo.clearbit.com/staples.com",
+    logoUrl: PUNCHOUT_VENDOR_LOGOS.staples,
     initials: "SA",
+    accent: "#CC0000",
+    logoFit: "cover",
     summary:
       "Order office supplies via Staples Advantage punchout with contracted pricing.",
     punchoutUrl: "#punchout-staples",
@@ -52,8 +64,10 @@ export const PUNCHOUT_VENDORS: PunchoutVendor[] = [
   {
     id: "cdw",
     name: "CDW",
-    logoUrl: "https://logo.clearbit.com/cdw.com",
+    logoUrl: PUNCHOUT_VENDOR_LOGOS.cdw,
     initials: "CDW",
+    accent: "#CC0000",
+    logoFit: "cover",
     summary:
       "IT products and services through CDW punchout; session returns for requisition completion.",
     punchoutUrl: "#punchout-cdw",
@@ -62,8 +76,10 @@ export const PUNCHOUT_VENDORS: PunchoutVendor[] = [
     id: "office-depot",
     name: "Office Depot",
     cardLabel: "Office Depot",
-    logoUrl: "https://logo.clearbit.com/officedepot.com",
+    logoUrl: PUNCHOUT_VENDOR_LOGOS["office-depot"],
     initials: "OD",
+    accent: "#E31837",
+    logoFit: "contain",
     summary:
       "Office supplies and furniture via Office Depot Business punchout.",
     punchoutUrl: "#punchout-office-depot",

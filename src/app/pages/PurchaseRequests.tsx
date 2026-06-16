@@ -18,6 +18,8 @@ import { Sidebar } from "../components/Sidebar";
 import { TopHeader } from "../components/TopHeader";
 import { PurchaseRequestModal, LineItemData, PRHeaderData } from "../components/PurchaseRequestModal";
 import { SkipToMainContent } from "../components/SkipToMainContent";
+import { ListPagination } from "../components/ListPagination";
+import { usePagination } from "../hooks/usePagination";
 import { UI_FONT_STACK as F } from "../tokens/typography";
 import { getStarredIds, toggleStarred } from "../utils/starredTransactions";
 
@@ -216,6 +218,11 @@ export function PurchaseRequests() {
     const matchStarred = !starredOnly || starredIds.has(pr.id);
     return matchSearch && matchStatus && matchStarred;
   });
+
+  const pagination = usePagination(filtered, {
+    resetKey: `${search}-${filterStatus}-${starredOnly}`,
+  });
+  const { paginatedItems } = pagination;
 
   const handleModalComplete = (data: {
     header: PRHeaderData;
@@ -609,7 +616,7 @@ export function PurchaseRequests() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((pr, idx) => {
+                  {paginatedItems.map((pr, idx) => {
                     const sc = statusConfig[pr.status];
                     const isHov = hoveredRow === pr.id;
                     const isPrStarred = starredIds.has(pr.id);
@@ -900,6 +907,15 @@ export function PurchaseRequests() {
                   })}
                 </tbody>
               </table>
+
+              <ListPagination
+                page={pagination.page}
+                totalPages={pagination.totalPages}
+                rangeStart={pagination.rangeStart}
+                rangeEnd={pagination.rangeEnd}
+                totalItems={pagination.totalItems}
+                onPageChange={pagination.setPage}
+              />
 
               {filtered.length === 0 && (
                 <div

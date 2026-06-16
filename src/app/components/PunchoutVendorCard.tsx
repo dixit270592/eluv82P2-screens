@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ChevronRight } from "lucide-react";
 
 import { UI_FONT_STACK as F } from "../tokens/typography";
 
@@ -8,6 +9,8 @@ export interface PunchoutVendorCardProps {
   logoUrl?: string | null;
   initials?: string;
   accent?: string;
+  /** How the logo fills the avatar circle */
+  logoFit?: "contain" | "cover";
   /** When true, row reflects open modal / current selection */
   active?: boolean;
   /** Omit bottom divider on the last row */
@@ -30,6 +33,7 @@ export function PunchoutVendorCard({
   logoUrl,
   initials,
   accent = "#1FA97A",
+  logoFit = "cover",
   active = false,
   isLast = false,
   onClick,
@@ -88,8 +92,8 @@ export function PunchoutVendorCard({
           width: 32,
           height: 32,
           borderRadius: "50%",
-          border: `1px solid ${accent}33`,
-          background: "#FFFFFF",
+          border: showImg && logoFit === "cover" ? "none" : `1px solid ${accent}33`,
+          background: showImg && logoFit === "cover" ? "transparent" : "#FFFFFF",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -102,11 +106,10 @@ export function PunchoutVendorCard({
             src={logoUrl!}
             alt=""
             style={{
-              width: "70%",
-              height: "70%",
-              maxWidth: 22,
-              maxHeight: 22,
-              objectFit: "contain",
+              width: logoFit === "cover" ? "100%" : "78%",
+              height: logoFit === "cover" ? "100%" : "78%",
+              objectFit: logoFit,
+              display: "block",
             }}
             onError={() => setImgErr(true)}
           />
@@ -138,6 +141,13 @@ export function PunchoutVendorCard({
       >
         {label}
       </span>
+      <ChevronRight
+        size={16}
+        color="#98A2B3"
+        strokeWidth={2}
+        aria-hidden
+        style={{ flexShrink: 0 }}
+      />
     </button>
   );
 }

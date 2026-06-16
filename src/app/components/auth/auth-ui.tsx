@@ -151,14 +151,16 @@ export function AuthSecondaryButton({
 }
 
 export function AuthDivider({ label = 'or' }: { label?: string }) {
+  const displayLabel = label === label.toUpperCase() ? label : label.toUpperCase();
+
   return (
     <div className="relative py-1" aria-hidden={label ? undefined : true}>
       <div className="absolute inset-0 flex items-center">
         <div className="w-full border-t border-[#EAECF0]" />
       </div>
       {label ? (
-        <p className="relative mx-auto w-fit bg-white px-3 text-[12px] font-medium uppercase tracking-wide text-[#98A2B3]">
-          {label}
+        <p className="relative mx-auto w-fit bg-white px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-[#98A2B3]">
+          {displayLabel}
         </p>
       ) : null}
     </div>
