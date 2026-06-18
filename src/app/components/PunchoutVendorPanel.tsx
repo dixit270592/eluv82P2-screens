@@ -29,6 +29,15 @@ const headerTitle: CSSProperties = {
   lineHeight: 1.35,
 };
 
+const headerSubtitle: CSSProperties = {
+  margin: "2px 0 0",
+  fontSize: 11,
+  fontWeight: 400,
+  color: "#667085",
+  fontFamily: F,
+  lineHeight: 1.35,
+};
+
 /** Horizontal inset for header, search, and rows — single grid */
 const GRID_X = 14;
 
@@ -102,6 +111,7 @@ export function PunchoutVendorPanel() {
           }}
         >
           <h3 style={headerTitle}>Punchout Vendors</h3>
+          <p style={headerSubtitle}>Shop contracted catalogs</p>
         </div>
 
         {/* Search */}
@@ -239,6 +249,8 @@ export function PunchoutVendorPanel() {
                 cardLabel={v.cardLabel}
                 logoUrl={v.logoUrl}
                 initials={v.initials}
+                accent={v.accent}
+                logoFit={v.logoFit}
                 active={selected?.id === v.id}
                 isLast={i === filtered.length - 1}
                 onClick={() => setSelected(v)}

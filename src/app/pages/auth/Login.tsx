@@ -1,28 +1,25 @@
-import { FormEvent, useState } from 'react';
+import { CSSProperties, FormEvent, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { AuthLayout } from '../../components/auth/AuthLayout';
 import { PasswordField } from '../../components/auth/PasswordField';
-import {
-  AuthDivider,
-  AuthField,
-  AuthFormFooter,
-  AuthInput,
-  AuthLink,
-  AuthMetaLinks,
-  AuthPrimaryButton,
-  AuthSecondaryButton,
-  AuthTextLink,
-} from '../../components/auth/auth-ui';
+import { SocialLoginOptions } from '../../components/auth/SocialLoginOptions';
+import { LOGIN_GREEN, LOGIN_GREEN_HOVER } from '../../components/auth/Eluv8AuthLogo';
+import { AuthDivider, AuthField, AuthInput, AuthTextLink } from '../../components/auth/auth-ui';
 import { Checkbox } from '../../components/ui/checkbox';
 import { Label } from '../../components/ui/label';
 import { DEMO_USER, useAuth } from '../../context/AuthContext';
+
+const greenScope = {
+  '--p2p-brand': LOGIN_GREEN,
+  '--p2p-brand-hover': LOGIN_GREEN_HOVER,
+} as CSSProperties;
 
 export function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { login } = useAuth();
   const [email, setEmail] = useState(DEMO_USER.email);
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState('demopassword');
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -51,25 +48,9 @@ export function Login() {
     }, 350);
   };
 
-  const handleDemo = () => {
-    setBusy(true);
-    window.setTimeout(() => {
-      completeSignIn(DEMO_USER);
-      setBusy(false);
-    }, 200);
-  };
-
   return (
-    <AuthLayout
-      title="Sign in"
-      subtitle="Access your procurement workspace."
-      footer={
-        <AuthFormFooter>
-          Don&apos;t have an account? <AuthLink to="/signup">Create account</AuthLink>
-        </AuthFormFooter>
-      }
-    >
-      <div className="space-y-6">
+    <AuthLayout variant="login" title="Sign in" subtitle="Access your procurement workspace.">
+      <div style={greenScope}>
         <form onSubmit={handleSubmit} className="space-y-5">
           <AuthField id="login-email" label="Work email">
             <AuthInput
@@ -77,7 +58,7 @@ export function Login() {
               type="email"
               name="email"
               autoComplete="username"
-              placeholder="you@company.com"
+              placeholder="demo@elementp2p.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -91,7 +72,7 @@ export function Login() {
             <PasswordField
               id="login-password"
               name="password"
-              placeholder="Any password works in demo"
+              placeholder=""
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -112,24 +93,22 @@ export function Login() {
             </Label>
           </div>
 
-          <AuthPrimaryButton type="submit" loading={busy} disabled={busy}>
+          <button
+            type="submit"
+            disabled={busy}
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--p2p-brand)] text-[15px] font-semibold text-white shadow-[0_1px_2px_rgba(16,24,40,0.06)] transition-colors duration-150 hover:bg-[var(--p2p-brand-hover)] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-60"
+          >
             {busy ? 'Signing in…' : 'Sign in'}
-          </AuthPrimaryButton>
+          </button>
         </form>
 
-        <AuthDivider />
+        <div className="mt-7">
+          <AuthDivider label="OR LOG IN WITH" />
+        </div>
 
-        <AuthSecondaryButton type="button" onClick={handleDemo} disabled={busy}>
-          Continue as demo
-        </AuthSecondaryButton>
-
-        <AuthMetaLinks>
-          <AuthTextLink to="/presentation" className="text-[#667085] hover:text-[var(--p2p-brand)]">
-            Client presentation
-          </AuthTextLink>
-          <span className="mx-2 text-[#D0D5DD]">·</span>
-          <span>SSO in production</span>
-        </AuthMetaLinks>
+        <div className="mt-6">
+          <SocialLoginOptions disabled={busy} />
+        </div>
       </div>
     </AuthLayout>
   );

@@ -11,6 +11,29 @@ import { Login } from './pages/auth/Login';
 import { SignUp } from './pages/auth/SignUp';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { RedirectHome } from './components/auth/RedirectHome';
+import { GroupSetup } from './pages/setup/GroupSetup';
+import { DepartmentLocationSetup } from './pages/setup/DepartmentLocationSetup';
+import { PurchaseRequestOptions } from './pages/setup/PurchaseRequestOptions';
+import { PurchaseOrderOptions } from './pages/setup/PurchaseOrderOptions';
+import { ReceivingOptions } from './pages/setup/ReceivingOptions';
+import { CustomOptions } from './pages/setup/CustomOptions';
+import { GlobalApprovalSetup } from './pages/setup/GlobalApprovalSetup';
+import { ApprovalWorkflowSetup } from './pages/setup/ApprovalWorkflowSetup';
+import { ApprovalGroupSetup } from './pages/setup/ApprovalGroupSetup';
+import { FilterProfileSetup } from './pages/setup/FilterProfileSetup';
+import { AccountSetup } from './pages/setup/AccountSetup';
+import { ProjectSetup } from './pages/setup/ProjectSetup';
+import { BudgetSetup } from './pages/setup/BudgetSetup';
+import { VendorSetup } from './pages/setup/VendorSetup';
+import { VendorPortal } from './pages/vendor/VendorPortal';
+import { AddressSetup } from './pages/setup/AddressSetup';
+import { UserSetup } from './pages/setup/UserSetup';
+import { UnitOfMeasureSetup } from './pages/setup/UnitOfMeasureSetup';
+import { ItemSetup } from './pages/setup/ItemSetup';
+import { ShippingMethodSetup } from './pages/setup/ShippingMethodSetup';
+import { PurchaseOrderTemplateSettings } from './pages/setup/PurchaseOrderTemplateSettings';
+import { PurchaseOrderTemplatePreview } from './pages/setup/PurchaseOrderTemplatePreview';
+import { GeneratePurchaseOrder } from './pages/po/GeneratePurchaseOrder';
 
 /** Must match Vite `base` (GitHub project site: /repo-name/ → basename /repo-name). */
 function routerBasename(): string | undefined {
@@ -54,6 +77,98 @@ export const router = createBrowserRouter(
           {
             path: '/pr/:prId',
             Component: MainPurchaseRequest,
+          },
+          {
+            path: '/setup/group',
+            Component: GroupSetup,
+          },
+          {
+            path: '/setup/department-location',
+            Component: DepartmentLocationSetup,
+          },
+          {
+            path: '/setup/purchase-request-options',
+            Component: PurchaseRequestOptions,
+          },
+          {
+            path: '/setup/purchase-order-options',
+            Component: PurchaseOrderOptions,
+          },
+          {
+            path: '/setup/receiving-options',
+            Component: ReceivingOptions,
+          },
+          {
+            path: '/setup/custom-options',
+            Component: CustomOptions,
+          },
+          {
+            path: '/setup/global-approvals',
+            Component: GlobalApprovalSetup,
+          },
+          {
+            path: '/setup/approval-workflow',
+            Component: ApprovalWorkflowSetup,
+          },
+          {
+            path: '/setup/approval-group',
+            Component: ApprovalGroupSetup,
+          },
+          {
+            path: '/setup/filter-profiles',
+            Component: FilterProfileSetup,
+          },
+          {
+            path: '/setup/account',
+            Component: AccountSetup,
+          },
+          {
+            path: '/setup/project',
+            Component: ProjectSetup,
+          },
+          {
+            path: '/setup/budget',
+            Component: BudgetSetup,
+          },
+          {
+            path: '/setup/vendor',
+            Component: VendorSetup,
+          },
+          {
+            path: '/vendor-portal/:vendorId',
+            Component: VendorPortal,
+          },
+          {
+            path: '/setup/address',
+            Component: AddressSetup,
+          },
+          {
+            path: '/setup/user',
+            Component: UserSetup,
+          },
+          {
+            path: '/setup/unit-of-measure',
+            Component: UnitOfMeasureSetup,
+          },
+          {
+            path: '/setup/item',
+            Component: ItemSetup,
+          },
+          {
+            path: '/setup/shipping-method',
+            Component: ShippingMethodSetup,
+          },
+          {
+            path: '/setup/po-template',
+            Component: PurchaseOrderTemplateSettings,
+          },
+          {
+            path: '/setup/po-template/preview',
+            Component: PurchaseOrderTemplatePreview,
+          },
+          {
+            path: '/purchase-orders/generate',
+            Component: GeneratePurchaseOrder,
           },
         ],
       },

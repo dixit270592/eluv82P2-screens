@@ -37,6 +37,28 @@ const newItems = [
 
 type SettingsSectionDef = { title: string; icon: LucideIcon; items: string[] };
 
+const settingsItemRoutes: Record<string, string> = {
+  'Group Setup': '/setup/group',
+  'Department / Location Setup': '/setup/department-location',
+  'Approval Group': '/setup/approval-group',
+  'Filter Profiles': '/setup/filter-profiles',
+  'Address Setup': '/setup/address',
+  'User Setup': '/setup/user',
+  'Unit of Measure': '/setup/unit-of-measure',
+  'Item Setup': '/setup/item',
+  'Shipping Method': '/setup/shipping-method',
+  'Purchase Request Options': '/setup/purchase-request-options',
+  'Purchase Order Options': '/setup/purchase-order-options',
+  'Receiving Options': '/setup/receiving-options',
+  'Custom Field Options': '/setup/custom-options',
+  'Global Approvals': '/setup/global-approvals',
+  'Approval Workflow Setup': '/setup/approval-workflow',
+  'Account Setup': '/setup/account',
+  'Project Setup': '/setup/project',
+  'Budget Setup': '/setup/budget',
+  'Vendor Setup': '/setup/vendor',
+};
+
 const settingsSectionDefs: SettingsSectionDef[] = [
   {
     title: 'Company Setup',
@@ -549,7 +571,11 @@ export function TopHeader({ onNewRequest, prId }: TopHeaderProps) {
                                 <li key={item}>
                                   <button
                                     type="button"
-                                    onClick={() => setSettingsOpen(false)}
+                                    onClick={() => {
+                                      const path = settingsItemRoutes[item];
+                                      if (path) navigate(path);
+                                      setSettingsOpen(false);
+                                    }}
                                     style={{
                                       display: 'flex',
                                       alignItems: 'center',

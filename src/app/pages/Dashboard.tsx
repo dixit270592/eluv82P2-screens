@@ -10,12 +10,7 @@ import {
   FileText,
   Clock,
   CheckCircle2,
-  Eye,
-  Filter,
-  ArrowUpRight,
-  ExternalLink,
   DollarSign,
-  TrendingUp,
   ShoppingCart,
   ListTodo,
   Receipt,
@@ -32,16 +27,7 @@ import {
   PackageOpen,
   PackagePlus,
   Calendar,
-  CalendarDays,
-  CalendarRange,
-  Hourglass,
   FolderOpen,
-  Timer,
-  FileStack,
-  UserCircle,
-  BadgeCheck,
-  Wallet,
-  ScanLine,
   SlidersHorizontal,
 } from "lucide-react";
 import { Sidebar } from "../components/Sidebar";
@@ -180,129 +166,72 @@ const statusConfig = {
   },
 };
 
-const stats = [
-  {
-    label: "Total Requests",
-    value: "24",
-    sub: "+4 this month",
-    trend: "up",
-    icon: FileText,
-    color: "#1FA97A",
-    bg: "#E6F7F1",
-  },
-  {
-    label: "Pending Approval",
-    value: "7",
-    sub: "3 require action",
-    trend: "up",
-    icon: Clock,
-    color: "#D97706",
-    bg: "#FEF3C7",
-  },
-  {
-    label: "Draft",
-    value: "5",
-    sub: "2 nearing deadline",
-    trend: "neutral",
-    icon: FileText,
-    color: "#667085",
-    bg: "#F2F4F7",
-  },
-  {
-    label: "Approved (YTD)",
-    value: "16",
-    sub: "$287,450 total",
-    trend: "up",
-    icon: CheckCircle2,
-    color: "#059669",
-    bg: "#ECFDF5",
-  },
-];
-
 const fmt = (n: number) =>
   n.toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
   });
 
-/**
- * Icon colors aligned with dashboard reference:
- * — sage: POs / blanket POs
- * — rose: invoices & time-sensitive / urgent items
- * — neutral: purchase requests, receipts, general alerts
- * — expense: expense requests (steel blue)
- * — receiptActivity: recent receipt scan (muted purple)
- * outerDashed: single ring uses dashed stroke for in-approval / waiting / pending-style rows (solid otherwise).
- */
-type MetricTone = "po" | "invoice" | "neutral" | "expense" | "receiptActivity";
+/** Dashboard card category colors */
+type MetricCategory =
+  | "purchaseRequest"
+  | "capex"
+  | "attention"
+  | "purchaseOrder"
+  | "invoice"
+  | "receiving"
+  | "completed";
 
-const METRIC_THEME: Record<
-  MetricTone,
-  { icon: string; ring: string; fill: string }
-> = {
-  po: {
-    icon: "#4F6B58",
-    ring: "#6A8574",
-    fill: "rgba(79, 107, 88, 0.14)",
-  },
-  invoice: {
-    icon: "#9A5564",
-    ring: "#B87A86",
-    fill: "rgba(154, 85, 100, 0.12)",
-  },
-  neutral: {
-    icon: "#5A616D",
-    ring: "#747B88",
-    fill: "rgba(90, 97, 109, 0.1)",
-  },
-  expense: {
-    icon: "#4A6B8A",
-    ring: "#6A88A3",
-    fill: "rgba(74, 107, 138, 0.12)",
-  },
-  receiptActivity: {
-    icon: "#5F5785",
-    ring: "#7D739D",
-    fill: "rgba(95, 87, 133, 0.12)",
-  },
+const CATEGORY_COLOR: Record<MetricCategory, string> = {
+  purchaseRequest: "#22C55E",
+  capex: "#F59E0B",
+  attention: "#EF4444",
+  purchaseOrder: "#3B82F6",
+  invoice: "#8B5CF6",
+  receiving: "#14B8A6",
+  completed: "#6B7280",
 };
 
-const dashboardMetrics: {
+function categoryTheme(category: MetricCategory) {
+  const accent = CATEGORY_COLOR[category];
+  return {
+    accent,
+    icon: accent,
+    ring: accent,
+    fill: `${accent}1A`,
+  };
+}
+
+const dashboardCards: {
   value: string;
   label: string;
   icon: LucideIcon;
-  tone: MetricTone;
-  outerDashed: boolean;
+  category: MetricCategory;
 }[] = [
-  { value: "13", label: "Your Purchase Requests in Approval", icon: ShoppingCart, tone: "neutral", outerDashed: true },
-  { value: "0", label: "All Capex Request in Approval", icon: ListTodo, tone: "neutral", outerDashed: true },
-  { value: "19", label: "All Capex Receipt", icon: Receipt, tone: "neutral", outerDashed: false },
-  { value: "3", label: "All Capex Invoice", icon: FileSpreadsheet, tone: "invoice", outerDashed: false },
-  { value: "23", label: "All Capex Request", icon: CircleAlert, tone: "neutral", outerDashed: false },
-  { value: "16", label: "Your Blanket POs", icon: Layers, tone: "po", outerDashed: false },
-  { value: "13", label: "Your PRs waiting more than 24 hours for approval", icon: Clock, tone: "invoice", outerDashed: false },
-  { value: "17", label: "Purchase Requests that need your attention", icon: AlertTriangle, tone: "invoice", outerDashed: false },
-  { value: "7", label: "Releases against your Blanket POs", icon: Link2, tone: "po", outerDashed: false },
-  { value: "0", label: "Purchase Requests that mention you", icon: AtSign, tone: "neutral", outerDashed: false },
-  { value: "25", label: "Your Expenses Requests", icon: DollarSign, tone: "expense", outerDashed: false },
-  { value: "1", label: "Your Newly Created POs", icon: Plus, tone: "po", outerDashed: false },
-  { value: "2", label: "Newly Approved PRs to be Converted to PO", icon: ArrowLeftRight, tone: "po", outerDashed: false },
-  { value: "16", label: "All PRs that need quoting", icon: FileQuestion, tone: "neutral", outerDashed: false },
-  { value: "13", label: "Purchase Requests that need your approval", icon: UserCheck, tone: "neutral", outerDashed: true },
-  { value: "27", label: "Open POs with No Receipts", icon: PackageX, tone: "po", outerDashed: false },
-  { value: "0", label: "Recently Received POs", icon: PackageOpen, tone: "neutral", outerDashed: false },
-  { value: "4", label: "Recently Created POs", icon: PackagePlus, tone: "po", outerDashed: false },
-  { value: "24", label: "Open POs (Last 30 Days)", icon: Calendar, tone: "po", outerDashed: false },
-  { value: "38", label: "Open POs (Last 60 Days)", icon: CalendarDays, tone: "po", outerDashed: false },
-  { value: "42", label: "Open POs (Last 90 Days)", icon: CalendarRange, tone: "po", outerDashed: false },
-  { value: "0", label: "Fully Received POs Pending Invoicing", icon: Hourglass, tone: "invoice", outerDashed: true },
-  { value: "98", label: "All Open POs", icon: FolderOpen, tone: "po", outerDashed: false },
-  { value: "1", label: "Invoices Pending Approval (>24 hrs)", icon: Timer, tone: "invoice", outerDashed: true },
-  { value: "3", label: "Invoices in Approval", icon: FileStack, tone: "invoice", outerDashed: true },
-  { value: "1", label: "Invoices Waiting for Your Approval", icon: UserCircle, tone: "invoice", outerDashed: true },
-  { value: "13", label: "Invoices Ready for Payment", icon: BadgeCheck, tone: "invoice", outerDashed: false },
-  { value: "6", label: "Expense Requests Needing Approval", icon: Wallet, tone: "expense", outerDashed: true },
-  { value: "0", label: "Recent Receipt Activity (All POs)", icon: ScanLine, tone: "receiptActivity", outerDashed: false },
+  { value: "24", label: "Total Requests", icon: FileText, category: "purchaseRequest" },
+  { value: "7", label: "Pending Approval", icon: Clock, category: "capex" },
+  { value: "5", label: "Draft", icon: FileText, category: "completed" },
+  { value: "16", label: "Approved (YTD)", icon: CheckCircle2, category: "completed" },
+  { value: "13", label: "Your Purchase Requests in Approval", icon: ShoppingCart, category: "purchaseRequest" },
+  { value: "0", label: "All Capex Request in Approval", icon: ListTodo, category: "capex" },
+  { value: "19", label: "All Capex Receipt", icon: Receipt, category: "receiving" },
+  { value: "3", label: "All Capex Invoice", icon: FileSpreadsheet, category: "invoice" },
+  { value: "23", label: "All Capex Request", icon: CircleAlert, category: "capex" },
+  { value: "16", label: "Your Blanket POs", icon: Layers, category: "purchaseOrder" },
+  { value: "13", label: "Your PRs waiting more than 24 hours for approval", icon: Clock, category: "attention" },
+  { value: "17", label: "Purchase Requests that need your attention", icon: AlertTriangle, category: "attention" },
+  { value: "7", label: "Releases against your Blanket POs", icon: Link2, category: "purchaseOrder" },
+  { value: "0", label: "Purchase Requests that mention you", icon: AtSign, category: "purchaseRequest" },
+  { value: "25", label: "Your Expenses Requests", icon: DollarSign, category: "capex" },
+  { value: "1", label: "Your Newly Created POs", icon: Plus, category: "purchaseOrder" },
+  { value: "2", label: "Newly Approved PRs to be Converted to PO", icon: ArrowLeftRight, category: "purchaseOrder" },
+  { value: "16", label: "All PRs that need quoting", icon: FileQuestion, category: "purchaseRequest" },
+  { value: "13", label: "Purchase Requests that need your approval", icon: UserCheck, category: "purchaseRequest" },
+  { value: "27", label: "Open POs with No Receipts", icon: PackageX, category: "attention" },
+  { value: "0", label: "Recently Received POs", icon: PackageOpen, category: "receiving" },
+  { value: "4", label: "Recently Created POs", icon: PackagePlus, category: "purchaseOrder" },
+  { value: "24", label: "Open POs (Last 30 Days)", icon: Calendar, category: "purchaseOrder" },
+  { value: "38", label: "Open POs", icon: FolderOpen, category: "purchaseOrder" },
 ];
 
 const METRIC_ICON_SIZE = 22;
@@ -573,127 +502,36 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* Primary snapshot — bordered group, separate from workflow tiles below */}
-            <section
-              style={{
-                marginBottom: 28,
-                minWidth: 0,
-                borderRadius: 15,
-                border: "1px solid #E4E7EC",
-                background: "#EEF2F7",
-                padding: "16px 18px 18px",
-              }}
-            >
-              <div className="app-stat-grid">
-                {stats.map((s, i) => {
-                  const Icon = s.icon;
-                  return (
-                    <motion.div
-                      key={s.label}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.2, delay: i * 0.04 }}
-                      style={{
-                        background: "#FFFFFF",
-                        border: "1px solid #E4E7EC",
-                        borderRadius: "10px",
-                        padding: "16px 16px",
-                        minHeight: 96,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 14,
-                        boxShadow: "0 1px 3px rgba(16, 24, 40, 0.06)",
-                      }}
-                    >
-                      <div
-                        aria-hidden
-                        style={{
-                          width: 52,
-                          height: 52,
-                          borderRadius: "50%",
-                          border: `1.5px solid ${s.color}33`,
-                          background: s.bg,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                          boxSizing: "border-box",
-                        }}
-                      >
-                        <Icon size={METRIC_ICON_SIZE} color={s.color} strokeWidth={METRIC_ICON_STROKE} />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: "12px",
-                            fontWeight: 600,
-                            color: "#667085",
-                            fontFamily: F,
-                            lineHeight: 1.3,
-                          }}
-                        >
-                          {s.label}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: "26px",
-                            fontWeight: 700,
-                            color: "#101828",
-                            fontFamily: F,
-                            lineHeight: 1.1,
-                            letterSpacing: "-0.03em",
-                            marginTop: 4,
-                          }}
-                        >
-                          {s.value}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: "11px",
-                            fontWeight: 500,
-                            color: "#98A2B3",
-                            fontFamily: F,
-                            marginTop: 4,
-                          }}
-                        >
-                          {s.sub}
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </section>
-
             <div className="app-metric-grid" style={{ marginBottom: "28px" }}>
-              {dashboardMetrics.map((metric, i) => {
-                const Icon = metric.icon;
-                const theme = METRIC_THEME[metric.tone];
+              {dashboardCards.map((card, i) => {
+                const Icon = card.icon;
+                const theme = categoryTheme(card.category);
                 return (
                 <motion.div
-                  key={i}
+                  key={card.label}
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.2, delay: Math.min(i * 0.015, 0.45) }}
                   style={{
                     background: "#FFFFFF",
                     border: "1px solid #E4E7EC",
+                    borderLeft: `4px solid ${theme.accent}`,
                     borderRadius: "8px",
                     padding: "14px 16px",
                     minHeight: 76,
                     display: "flex",
                     alignItems: "center",
                     gap: 14,
-                    boxShadow: "0 1px 2px rgba(16, 24, 40, 0.05)",
+                    boxShadow: "0 1px 3px rgba(16, 24, 40, 0.06)",
                   }}
                 >
                   <div
                     aria-hidden
                     style={{
-                      width: 52.8,
-                      height: 52.8,
+                      width: 52,
+                      height: 52,
                       borderRadius: "50%",
-                      border: `1.5px ${metric.outerDashed ? "dashed" : "solid"} ${theme.ring}`,
+                      border: `1.5px solid ${theme.ring}`,
                       background: theme.fill,
                       display: "flex",
                       alignItems: "center",
@@ -727,7 +565,7 @@ export function Dashboard() {
                         lineHeight: 1.35,
                       }}
                     >
-                      {metric.label}
+                      {card.label}
                     </div>
                     <div
                       style={{
@@ -739,7 +577,7 @@ export function Dashboard() {
                         letterSpacing: "-0.02em",
                       }}
                     >
-                      {metric.value}
+                      {card.value}
                     </div>
                   </div>
                 </motion.div>
