@@ -1,15 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Save, Send, X, Search, Settings, ChevronDown, Plus, Trash2, ArrowLeft,
-  CheckCircle2, AlertCircle, MoreHorizontal, RefreshCw, Calendar, Clock, RotateCcw, Edit3, DollarSign, ExternalLink,
+  Save, Send, X, Search, Settings, ChevronDown, ChevronUp, ArrowLeft,
+  CheckCircle2, AlertCircle, MoreHorizontal, RefreshCw, Calendar, Clock, RotateCcw, Edit3,
   FilePlus, FileText,
 } from 'lucide-react';
 import { Sidebar } from '../components/Sidebar';
 import { TopHeader } from '../components/TopHeader';
 import { PurchaseRequestModal, LineItemData, PRHeaderData } from '../components/PurchaseRequestModal';
-import { AddItemModal, AddItemData } from '../components/AddItemModal';
+import { PRLineItemsWithLayoutPicker, type PRLineItem, type PRLineItemsSectionHandle } from '../components/pr-line-items';
+import { loadPurchaseRequestOptions } from '../data/purchaseRequestOptions';
 import { SendForApprovalModal } from '../components/SendForApprovalModal';
 import { GLDistributionModal } from '../components/GLDistributionModal';
 import { PurchaseRequestHistoryPanel, type HistoryActivityItem, type HistoryStatus } from '../components/PurchaseRequestHistoryPanel';
@@ -17,6 +18,7 @@ import { SkipToMainContent } from '../components/SkipToMainContent';
 import { PRWorkflowHeader, WorkflowActionButton } from '../components/pr-workflow';
 import type { PRStatus as WorkflowPRStatus, ViewRole } from '../types/prWorkflow';
 import { UI_FONT_STACK as F } from '../tokens/typography';
+import { P2P_BRAND } from '../tokens/brand';
 import { printTransaction } from '../utils/printTransaction';
 import { isStarred as checkStarred, toggleStarred } from '../utils/starredTransactions';
 const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -29,12 +31,7 @@ const DEFAULT_HEADER: PRHeaderData = {
   deliveryLocation: 'NY Office, Loading Lock 3',
 };
 
-interface ExtendedLineItem extends LineItemData {
-  type?: string;
-  unitOfMeasure?: string;
-  taxGroup?: string;
-  glAccountsCount?: number;
-}
+type ExtendedLineItem = PRLineItem;
 
 interface RFQRecord {
   id: string;
@@ -46,14 +43,59 @@ interface RFQRecord {
 }
 
 const DEFAULT_LINE_ITEMS: ExtendedLineItem[] = [
-  { id: '1', item: '84 Lumber', vendor: '84 Lumber', quantity: 1, cost: 100.0, subtotal: 100.0, glAccount: '6100 - Computer Equipment', type: 'Goods', unitOfMeasure: 'Each', taxGroup: 'Standard', glAccountsCount: 1 },
-  { id: '2', item: 'Ted 3', vendor: '84 Lumber', quantity: 2, cost: 200.0, subtotal: 400.0, glAccount: '6200 - Software & Licenses', type: 'Goods', unitOfMeasure: 'Each', taxGroup: 'Standard', glAccountsCount: 1 },
-  { id: '3', item: 'Ted 3', vendor: '84 Lumber', quantity: 2, cost: 200.0, subtotal: 400.0, glAccount: '6200 - Software & Licenses', type: 'Goods', unitOfMeasure: 'Each', taxGroup: 'Standard', glAccountsCount: 1 },
+  {
+    id: '1',
+    item: 'Dell Latitude 5540 Laptop',
+    vendor: '84 Lumber',
+    quantity: 1,
+    cost: 100.0,
+    subtotal: 100.0,
+    glAccount: '6100 - Computer Equipment',
+    type: 'Goods',
+    unitOfMeasure: 'Each',
+    taxGroup: 'Standard',
+    glAccountsCount: 1,
+    requiredBy: '2026-03-15',
+    vendorTerms: 'Net 30',
+    projectAccount: 'Project A - Operations',
+  },
+  {
+    id: '2',
+    item: 'Microsoft 365 Business Premium',
+    vendor: '84 Lumber',
+    quantity: 2,
+    cost: 200.0,
+    subtotal: 400.0,
+    glAccount: '6200 - Software & Licenses',
+    type: 'Services',
+    unitOfMeasure: 'Each',
+    taxGroup: 'Standard',
+    glAccountsCount: 2,
+    requiredBy: '2026-03-20',
+    vendorTerms: 'Net 15',
+    projectAccount: 'Project C - Development',
+  },
+  {
+    id: '4',
+    item: 'FedEx Ground shipping — Q1 restock',
+    vendor: '84 Lumber',
+    quantity: 1,
+    cost: 100.0,
+    subtotal: 100.0,
+    glAccount: '6400 - Freight & Shipping',
+    type: 'Services',
+    unitOfMeasure: 'Each',
+    taxGroup: 'Standard',
+    glAccountsCount: 1,
+    requiredBy: '2026-03-18',
+    vendorTerms: 'Due on Receipt',
+    projectAccount: 'Project B - Marketing',
+  },
 ];
 
 /** Rows with a description count toward submit / RFQ validation. */
 const hasValidLineItems = (items: ExtendedLineItem[]) =>
-  items.some((i) => Boolean(i.item?.trim()) && i.id !== 'blank-row');
+  items.some((i) => Boolean(i.item?.trim()));
 
 type PRStatus = 'unsubmitted' | 'recalled' | 'awaiting_approval' | 'submitted' | 'approved' | 'rejected';
 
@@ -117,17 +159,17 @@ export function MainPurchaseRequestV2() {
   const [poCreated, setPoCreated] = useState(false);
   const [activeTab, setActiveTab] = useState('Items');
   const [modalOpen, setModalOpen] = useState(false);
-  const [addItemModalOpen, setAddItemModalOpen] = useState(false);
   const [sendApprovalModalOpen, setSendApprovalModalOpen] = useState(false);
+  const [prOptions] = useState(() => loadPurchaseRequestOptions());
+  const [lineItemErrors, setLineItemErrors] = useState(0);
+  const lineItemsSectionRef = useRef<PRLineItemsSectionHandle>(null);
   const [glDistributionRow, setGLDistributionRow] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ type: 'cancel' | 'recall' | null; show: boolean }>({ type: null, show: false });
   const [headerEditMode, setHeaderEditMode] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(true);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'info' | 'error' } | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [editingCell, setEditingCell] = useState<{ rowId: string; field: string } | null>(null);
   const [editingHeaderField, setEditingHeaderField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
-  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [budgetPopupRow, setBudgetPopupRow] = useState<string | null>(null);
   const [budgetReportRow, setBudgetReportRow] = useState<string | null>(null);
   const [isStarred, setIsStarred] = useState(() => checkStarred(prId));
@@ -248,7 +290,21 @@ export function MainPurchaseRequestV2() {
   };
 
   const handleSubmit = () => {
-    if (!hasValidLineItems(lineItems)) { showToast('Add at least one line item', 'error'); return; }
+    if (!hasValidLineItems(lineItems)) {
+      showToast('Add at least one line item', 'error');
+      return;
+    }
+    // Check for row-level validation errors
+    const errCount = lineItemsSectionRef.current?.errorCount() ?? 0;
+    if (errCount > 0) {
+      setActiveTab('Items');
+      setLineItemErrors(errCount);
+      // Give the tab time to render then scroll to first error
+      requestAnimationFrame(() => lineItemsSectionRef.current?.focusFirstError());
+      showToast(`Fix ${errCount} item error${errCount !== 1 ? 's' : ''} before submitting`, 'error');
+      return;
+    }
+    setLineItemErrors(0);
     setSendApprovalModalOpen(true);
   };
 
@@ -336,24 +392,37 @@ export function MainPurchaseRequestV2() {
     showToast(starred ? 'Transaction starred' : 'Star removed', starred ? 'success' : 'info');
   };
 
-  const handleCreateRFQ = () => {
-    if (!hasValidLineItems(lineItems)) {
-      showToast('Add at least one line item before creating an RFQ', 'error');
+  const handleCreateRFQ = (selectedItemIds?: string[]) => {
+    const sourceItems = selectedItemIds?.length
+      ? lineItems.filter((item) => selectedItemIds.includes(item.id))
+      : lineItems;
+
+    if (!hasValidLineItems(sourceItems)) {
+      showToast('Select at least one valid line item before creating an RFQ', 'error');
       return;
     }
+
     const rfqId = `RFQ-${new Date().getFullYear()}-${String(rfqRecords.length + 1).padStart(3, '0')}`;
-    const uniqueVendors = new Set(lineItems.map((item) => item.vendor).filter(Boolean));
+    const uniqueVendors = new Set(sourceItems.map((item) => item.vendor).filter(Boolean));
+    const rfqAmount = sourceItems.reduce((sum, item) => sum + item.subtotal, 0);
     const newRfq: RFQRecord = {
       id: rfqId,
       status: 'draft',
       vendors: Math.max(uniqueVendors.size, 1),
-      lineItems: lineItems.length,
-      amount: subtotalAll,
+      lineItems: sourceItems.length,
+      amount: rfqAmount,
       createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
     };
     setRfqRecords((prev) => [...prev, newRfq]);
     setActiveTab('RFQ');
-    addActivity('RFQ created', `${rfqId} created from ${lineItems.length} line item(s)`, 'data_entry', 'success');
+    addActivity(
+      'RFQ created',
+      selectedItemIds?.length
+        ? `${rfqId} created from ${sourceItems.length} selected line item(s)`
+        : `${rfqId} created from ${sourceItems.length} line item(s)`,
+      'data_entry',
+      'success',
+    );
     showToast(`${rfqId} created successfully`, 'success');
   };
 
@@ -384,28 +453,6 @@ export function MainPurchaseRequestV2() {
     setModalOpen(false);
   };
 
-  const handleAddItemSave = (data: AddItemData) => {
-    const newItem: ExtendedLineItem = {
-      id: Date.now().toString(),
-      item: data.description,
-      vendor: data.vendor || '84 Lumber',
-      quantity: data.quantity,
-      cost: data.cost,
-      subtotal: data.quantity * data.cost,
-      glAccount: data.glAccounts.length > 0 ? `${data.glAccounts[0].account} - ${data.glAccounts[0].name}` : '6100 - Office Supplies',
-      type: data.type,
-      unitOfMeasure: data.unitOfMeasure,
-      taxGroup: data.taxGroup,
-      glAccountsCount: data.glAccounts.length,
-    };
-    setLineItems((prev) => [...prev, newItem]);
-    addActivity('Item added', `Added ${data.description}`, 'data_entry', 'success');
-    showToast('Item added successfully', 'success');
-    setAddItemModalOpen(false);
-  };
-
-  const startEdit = (rowId: string, field: string, val: string | number) => { setEditingCell({ rowId, field }); setEditValue(String(val)); };
-
   const startHeaderEdit = (field: string) => {
     setEditingHeaderField(field);
     setEditValue(headerFieldData[field as keyof typeof headerFieldData]);
@@ -417,99 +464,6 @@ export function MainPurchaseRequestV2() {
     setEditingHeaderField(null);
     showToast('Field updated', 'success');
   };
-
-  const commitEdit = () => {
-    if (!editingCell) return;
-    const { rowId, field } = editingCell;
-
-    if (rowId === 'blank-row') {
-      const newItem: ExtendedLineItem = {
-        id: Date.now().toString(),
-        item: field === 'item' ? editValue : '',
-        vendor: field === 'vendor' ? editValue : (prHeader.vendor || '84 Lumber'),
-        quantity: field === 'quantity' ? (parseFloat(editValue) || 1) : 1,
-        cost: field === 'cost' ? (parseFloat(editValue) || 0) : 0,
-        subtotal: 0,
-        glAccount: '6100 - Office Supplies',
-        type: field === 'type' ? editValue : 'Goods',
-        unitOfMeasure: field === 'unitOfMeasure' ? editValue : 'Each',
-        taxGroup: field === 'taxGroup' ? editValue : 'Standard',
-        glAccountsCount: 1,
-      };
-      newItem.subtotal = newItem.quantity * newItem.cost;
-      setLineItems((prev) => [...prev, newItem]);
-      setEditingCell(null);
-      return;
-    }
-
-    setLineItems((prev) => prev.map((item) => {
-      if (item.id !== rowId) return item;
-      const u = { ...item };
-      if (field === 'item') u.item = editValue;
-      else if (field === 'vendor') u.vendor = editValue;
-      else if (field === 'type') u.type = editValue;
-      else if (field === 'unitOfMeasure') u.unitOfMeasure = editValue;
-      else if (field === 'taxGroup') u.taxGroup = editValue;
-      else if (field === 'quantity') { u.quantity = parseFloat(editValue) || item.quantity; u.subtotal = u.quantity * u.cost; }
-      else if (field === 'cost') { u.cost = parseFloat(editValue) || item.cost; u.subtotal = u.quantity * u.cost; }
-      return u;
-    }));
-    setEditingCell(null);
-  };
-
-  const addNewRow = () => {
-    const newItem: ExtendedLineItem = {
-      id: Date.now().toString(),
-      item: '',
-      vendor: '84 Lumber',
-      quantity: 1,
-      cost: 0,
-      subtotal: 0,
-      glAccount: '6100 - Office Supplies',
-      type: 'Goods',
-      unitOfMeasure: 'Each',
-      taxGroup: 'Standard',
-      glAccountsCount: 1,
-    };
-    setLineItems((prev) => [...prev, newItem]);
-    addActivity('Row added', 'New item row added', 'data_entry', 'neutral');
-    setTimeout(() => startEdit(newItem.id, 'item', ''), 100);
-  };
-
-  const isEditing = (rowId: string, field: string) => editingCell?.rowId === rowId && editingCell?.field === field;
-
-  const baseFilteredItems = lineItems.filter((i) => !searchQuery || i.item.toLowerCase().includes(searchQuery.toLowerCase()) || i.vendor.toLowerCase().includes(searchQuery.toLowerCase()));
-
-  const blankRow: ExtendedLineItem = {
-    id: 'blank-row',
-    item: '',
-    vendor: prHeader.vendor || '84 Lumber',
-    quantity: 1,
-    cost: 0,
-    subtotal: 0,
-    glAccount: '6100 - Office Supplies',
-    type: 'Goods',
-    unitOfMeasure: 'Each',
-    taxGroup: 'Standard',
-    glAccountsCount: 1,
-  };
-
-  const filteredItems = lineItems.length > 0 && !searchQuery ? [...baseFilteredItems, blankRow] : baseFilteredItems;
-
-  const CellInput = ({ rowId, field }: { rowId: string; field: string }) => (
-    <input autoFocus value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={commitEdit}
-      onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingCell(null); }}
-      style={{ width: '100%', height: '28px', border: '1.5px solid #1FA97A', borderRadius: '4px', padding: '0 7px', fontSize: '13px', fontFamily: F, color: '#101828', outline: 'none', background: '#F0FDF9' }}
-    />
-  );
-
-  const CellSelect = ({ rowId, field, options }: { rowId: string; field: string; options: string[] }) => (
-    <select autoFocus value={editValue} onChange={(e) => { setEditValue(e.target.value); setTimeout(commitEdit, 0); }} onBlur={commitEdit}
-      style={{ width: '100%', height: '30px', border: '1.5px solid #1FA97A', borderRadius: '4px', padding: '0 7px', fontSize: '13px', fontFamily: F, color: '#101828', outline: 'none', background: '#F0FDF9', cursor: 'pointer' }}
-    >
-      {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-    </select>
-  );
 
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: F, background: '#F5F7FA', overflow: 'hidden' }}>
@@ -565,17 +519,50 @@ export function MainPurchaseRequestV2() {
 
             {/* PR Details */}
             <div style={{ background: '#FFFFFF', border: '1px solid #E4E7EC', borderRadius: '10px', boxShadow: '0 1px 4px rgba(16,24,40,0.04)', marginBottom: '16px', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #EEF1F5' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: detailsExpanded ? '1px solid #EEF1F5' : 'none' }}>
                 <span style={{ fontSize: '14px', fontWeight: 700, color: '#101828', fontFamily: F }}>Request Details</span>
-                <button
-                  type="button"
-                  onClick={() => setHeaderEditMode(!headerEditMode)}
-                  style={{ width: '32px', height: '32px', border: '1px solid #E4E7EC', borderRadius: '6px', background: headerEditMode ? '#F0FDF9' : '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s' }}
-                  title="Edit / unlock header fields"
-                >
-                  <Settings size={14} color={headerEditMode ? '#1FA97A' : '#667085'} strokeWidth={1.8} />
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setDetailsExpanded((prev) => !prev)}
+                    aria-expanded={detailsExpanded}
+                    aria-label={detailsExpanded ? 'Collapse request details' : 'Expand request details'}
+                    style={{ width: '32px', height: '32px', border: '1px solid #E4E7EC', borderRadius: '6px', background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s, border-color 0.15s' }}
+                    title={detailsExpanded ? 'Collapse details' : 'Expand details'}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#F5F7FA';
+                      e.currentTarget.style.borderColor = '#D0D5DD';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#FFFFFF';
+                      e.currentTarget.style.borderColor = '#E4E7EC';
+                    }}
+                  >
+                    {detailsExpanded ? (
+                      <ChevronUp size={14} color="#667085" strokeWidth={1.8} aria-hidden />
+                    ) : (
+                      <ChevronDown size={14} color="#667085" strokeWidth={1.8} aria-hidden />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHeaderEditMode(!headerEditMode)}
+                    style={{ width: '32px', height: '32px', border: '1px solid #E4E7EC', borderRadius: '6px', background: headerEditMode ? '#F0FDF9' : '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s' }}
+                    title="Edit / unlock header fields"
+                  >
+                    <Settings size={14} color={headerEditMode ? '#1FA97A' : '#667085'} strokeWidth={1.8} />
+                  </button>
+                </div>
               </div>
+              <AnimatePresence initial={false}>
+                {detailsExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2, ease: 'easeInOut' }}
+                    style={{ overflow: 'hidden' }}
+                  >
               <div style={{ position: 'relative', padding: '20px 24px', opacity: headerEditMode ? 0.65 : 1, pointerEvents: headerEditMode ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
               {headerEditMode && (
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.88)', zIndex: 10 }}>
@@ -704,6 +691,9 @@ export function MainPurchaseRequestV2() {
                 </div>
               </div>
               </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <div style={{ background: '#FFFFFF', border: '1px solid #E4E7EC', borderRadius: '10px', boxShadow: '0 1px 4px rgba(16,24,40,0.04)', overflow: 'hidden' }}>
@@ -722,189 +712,89 @@ export function MainPurchaseRequestV2() {
               </button>
             </div>
 
-            {/* Items table */}
+            {/* Line items */}
             {activeTab === 'Items' && (
-              <div style={{ overflow: 'hidden' }}>
-                {/* Toolbar */}
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #EEF1F5', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '32px', padding: '0 12px', border: '1px solid #E4E7EC', borderRadius: '5px', background: '#F9FAFB', flex: 1, maxWidth: '260px' }}>
-                    <Search size={12} color="#98A2B3" strokeWidth={2} />
-                    <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search items..." style={{ border: 'none', background: 'transparent', fontSize: '12px', color: '#101828', fontFamily: F, outline: 'none', flex: 1 }} />
-                  </div>
-                  <div style={{ flex: 1 }} />
-                  <button onClick={() => setModalOpen(true)} style={{ height: '32px', padding: '0 14px', background: '#FFFFFF', border: '1.5px solid #D0D5DD', borderRadius: '5px', fontSize: '12px', fontWeight: 600, color: '#344054', fontFamily: F, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', transition: 'all 0.15s' }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#F0FDF9'; (e.currentTarget as HTMLElement).style.borderColor = '#1FA97A'; (e.currentTarget as HTMLElement).style.color = '#1FA97A'; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = '#FFFFFF'; (e.currentTarget as HTMLElement).style.borderColor = '#D0D5DD'; (e.currentTarget as HTMLElement).style.color = '#344054'; }}
-                  >
-                    <Plus size={13} strokeWidth={2.5} /> Select Item Form Inventory
-                  </button>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', height: '32px', padding: '0 10px', border: '1px solid #E4E7EC', borderRadius: '5px', cursor: 'pointer', fontSize: '12px', color: '#667085', fontFamily: F, background: '#FFFFFF' }}>
-                    Filter <ChevronDown size={11} strokeWidth={2} color="#98A2B3" />
-                  </div>
-                </div>
+              <>
+                {/* Submit-blocked error banner */}
+                <AnimatePresence>
+                  {lineItemErrors > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      style={{ overflow: 'hidden' }}
+                    >
+                      <div
+                        role="alert"
+                        style={{
+                          margin: '12px 16px 0',
+                          padding: '10px 14px',
+                          borderRadius: '7px',
+                          background: '#FEF3F2',
+                          border: '1px solid #FECDCA',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                        }}
+                      >
+                        <AlertCircle size={16} color="#B42318" strokeWidth={2} style={{ flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: '13px', fontWeight: 600, color: '#B42318', fontFamily: F }}>
+                            {lineItemErrors} item{lineItemErrors !== 1 ? 's have' : ' has'} errors that must be fixed before submitting.
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLineItemErrors(0);
+                            lineItemsSectionRef.current?.focusFirstError();
+                          }}
+                          style={{
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            color: P2P_BRAND.primaryStrong,
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontFamily: F,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Show first error
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLineItemErrors(0)}
+                          style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '2px', display: 'flex' }}
+                          aria-label="Dismiss"
+                        >
+                          <X size={14} color="#B42318" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1200px' }}>
-                    <thead>
-                      <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E4E7EC' }}>
-                        {[['Description ↑', 'auto'], ['Type', '100px'], ['Unit', '90px'], ['Vendor', '130px'], ['Quantity', '80px'], ['Cost', '100px'], ['Tax', '90px'], ['GL', '70px'], ['Sub Total', '100px'], ['', '70px'], ['', '36px']].map(([label, w]) => (
-                          <th key={`${label}-${w}`} style={{ padding: '10px 14px', textAlign: 'left', width: w, fontSize: '11px', fontWeight: 600, color: '#667085', fontFamily: F, letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>{label}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <AnimatePresence>
-                        {filteredItems.map((item) => {
-                          const isNewRow = !item.item;
-                          return (
-                            <motion.tr key={item.id} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.18 }}
-                              style={{ borderBottom: '1px solid #F2F4F7', background: isNewRow ? '#FFFEF0' : (hoveredRow === item.id ? '#FAFAFA' : '#FFFFFF'), transition: 'background 0.1s' }}
-                              onMouseEnter={() => setHoveredRow(item.id)} onMouseLeave={() => setHoveredRow(null)}
-                            >
-                              {/* Description */}
-                              <td style={{ padding: '12px 14px' }}>
-                                {isEditing(item.id, 'item') ? <CellInput rowId={item.id} field="item" /> : (
-                                  <div onClick={() => startEdit(item.id, 'item', item.item)} style={{ cursor: 'text' }}>
-                                    <div style={{ fontSize: '13px', color: item.item ? '#101828' : '#98A2B3', fontFamily: F, fontWeight: 500 }}>{item.item || 'Enter description...'}</div>
-                                    <div style={{ fontSize: '11px', color: '#98A2B3', fontFamily: F, marginTop: '4px' }}>{item.glAccount.split(' - ')[0]}</div>
-                                  </div>
-                                )}
-                              </td>
-                              {/* Type */}
-                              <td style={{ padding: '12px 14px' }}>
-                                {isEditing(item.id, 'type') ? <CellSelect rowId={item.id} field="type" options={['Goods', 'Services', 'Assets']} /> : (
-                                  <span onClick={() => startEdit(item.id, 'type', item.type || 'Goods')} style={{ fontSize: '13px', color: '#344054', fontFamily: F, cursor: 'pointer' }}>{item.type || 'Goods'}</span>
-                                )}
-                              </td>
-                              {/* Unit of Measure */}
-                              <td style={{ padding: '12px 14px' }}>
-                                {isEditing(item.id, 'unitOfMeasure') ? <CellSelect rowId={item.id} field="unitOfMeasure" options={['Each', 'Box', 'Case', 'Hour', 'Day']} /> : (
-                                  <span onClick={() => startEdit(item.id, 'unitOfMeasure', item.unitOfMeasure || 'Each')} style={{ fontSize: '13px', color: '#344054', fontFamily: F, cursor: 'pointer' }}>{item.unitOfMeasure || 'Each'}</span>
-                                )}
-                              </td>
-                              {/* Vendor */}
-                              <td style={{ padding: '12px 14px' }}>
-                                {isEditing(item.id, 'vendor') ? <CellInput rowId={item.id} field="vendor" /> : (
-                                  <div onClick={() => startEdit(item.id, 'vendor', item.vendor)} style={{ cursor: 'text' }}>
-                                    <div style={{ fontSize: '13px', color: '#344054', fontFamily: F }}>{item.vendor}</div>
-                                    <div style={{ fontSize: '11px', color: '#98A2B3', fontFamily: F, marginTop: '4px' }}>Vendor #123</div>
-                                  </div>
-                                )}
-                              </td>
-                              {/* Quantity */}
-                              <td style={{ padding: '12px 14px' }}>
-                                {isEditing(item.id, 'quantity') ? <CellInput rowId={item.id} field="quantity" /> : (
-                                  <span onClick={() => startEdit(item.id, 'quantity', item.quantity)} style={{ fontSize: '13px', color: item.id === 'blank-row' ? '#98A2B3' : '#344054', fontFamily: F, cursor: 'text' }}>{item.id === 'blank-row' ? '' : item.quantity}</span>
-                                )}
-                              </td>
-                              {/* Cost */}
-                              <td style={{ padding: '12px 14px' }}>
-                                {isEditing(item.id, 'cost') ? <CellInput rowId={item.id} field="cost" /> : (
-                                  <div onClick={() => startEdit(item.id, 'cost', item.cost)} style={{ cursor: 'text' }}>
-                                    <div style={{ fontSize: '13px', color: item.id === 'blank-row' ? '#98A2B3' : '#344054', fontFamily: F }}>{item.id === 'blank-row' ? '' : fmt(item.cost)}</div>
-                                    {item.id !== 'blank-row' && <div style={{ fontSize: '11px', color: '#98A2B3', fontFamily: F, marginTop: '4px' }}>Per {item.unitOfMeasure || 'Unit'}</div>}
-                                  </div>
-                                )}
-                              </td>
-                              {/* Tax Group */}
-                              <td style={{ padding: '12px 14px' }}>
-                                {isEditing(item.id, 'taxGroup') ? <CellSelect rowId={item.id} field="taxGroup" options={['Standard', 'Exempt', 'Reduced']} /> : (
-                                  <span onClick={() => startEdit(item.id, 'taxGroup', item.taxGroup || 'Standard')} style={{ fontSize: '13px', color: '#344054', fontFamily: F, cursor: 'pointer' }}>{item.taxGroup || 'Standard'}</span>
-                                )}
-                              </td>
-                              {/* GL Distribution */}
-                              <td style={{ padding: '12px 14px' }}>
-                                {item.id !== 'blank-row' && (
-                                  <button
-                                    onClick={() => setGLDistributionRow(item.id)}
-                                    style={{ height: '24px', padding: '0 8px', background: '#F9FAFB', border: '1px solid #E4E7EC', borderRadius: '4px', fontSize: '11px', fontWeight: 600, color: '#667085', fontFamily: F, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s' }}
-                                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#F0FDF9'; (e.currentTarget as HTMLElement).style.borderColor = '#1FA97A'; (e.currentTarget as HTMLElement).style.color = '#1FA97A'; }}
-                                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = '#F9FAFB'; (e.currentTarget as HTMLElement).style.borderColor = '#E4E7EC'; (e.currentTarget as HTMLElement).style.color = '#667085'; }}
-                                  >
-                                    {item.glAccountsCount || 1} GL
-                                  </button>
-                                )}
-                              </td>
-                              {/* Subtotal */}
-                              <td style={{ padding: '12px 14px' }}>
-                                <span style={{ fontSize: '13px', fontWeight: 700, color: item.id === 'blank-row' ? '#98A2B3' : '#101828', fontFamily: F }}>{item.id === 'blank-row' ? '' : fmt(item.subtotal)}</span>
-                              </td>
-                              {/* Action Icons */}
-                              <td style={{ padding: '12px 14px' }}>
-                                {item.id !== 'blank-row' && (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <button
-                                      onClick={() => setBudgetPopupRow(item.id)}
-                                      style={{
-                                        width: '28px',
-                                        height: '28px',
-                                        borderRadius: '5px',
-                                        border: 'none',
-                                        background: 'transparent',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        cursor: 'pointer',
-                                        transition: 'background 0.15s',
-                                      }}
-                                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#FEF2F2'; }}
-                                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                                    >
-                                      <DollarSign size={14} color="#EF4444" strokeWidth={2} />
-                                    </button>
-                                    <button
-                                      onClick={() => setBudgetReportRow(item.id)}
-                                      style={{
-                                        width: '28px',
-                                        height: '28px',
-                                        borderRadius: '5px',
-                                        border: 'none',
-                                        background: 'transparent',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        cursor: 'pointer',
-                                        transition: 'background 0.15s',
-                                      }}
-                                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#F9FAFB'; }}
-                                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                                    >
-                                      <ExternalLink size={14} color="#667085" strokeWidth={2} />
-                                    </button>
-                                  </div>
-                                )}
-                              </td>
-                              {/* Delete */}
-                              <td style={{ padding: '12px 14px' }}>
-                                {item.id !== 'blank-row' && (
-                                  <button onClick={() => { setLineItems((prev) => prev.filter((i) => i.id !== item.id)); showToast('Item removed', 'info'); }}
-                                    style={{ width: '26px', height: '26px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#98A2B3', opacity: hoveredRow === item.id ? 1 : 0, transition: 'opacity 0.15s, background 0.15s' }}
-                                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#FEF2F2'; (e.currentTarget as HTMLElement).style.color = '#F04438'; }}
-                                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = '#98A2B3'; }}
-                                  ><Trash2 size={12} strokeWidth={2} /></button>
-                                )}
-                              </td>
-                            </motion.tr>
-                          );
-                        })}
-                      </AnimatePresence>
-                      {filteredItems.length === 0 && (
-                        <tr><td colSpan={11}><div style={{ padding: '40px 24px', textAlign: 'center', color: '#98A2B3', fontSize: '13px', fontFamily: F }}>No items found. Click "Add Item" to start adding items.</div></td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {lineItems.length > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '2px solid #E4E7EC', background: '#F9FAFB' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#344054', fontFamily: F }}>Total</span>
-                    <div style={{ display: 'flex', gap: '48px', alignItems: 'center' }}>
-                      <span style={{ fontSize: '13px', color: '#667085', fontFamily: F }}>Sub Total</span>
-                      <span style={{ fontSize: '14px', fontWeight: 700, color: '#101828', fontFamily: F }}>Total: {fmt(subtotalAll)}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
+                {/* Layout version toggle for demo comparison */}
+                <PRLineItemsWithLayoutPicker
+                  ref={lineItemsSectionRef}
+                  items={lineItems}
+                  onChange={(updated) => { setLineItems(updated); if (lineItemErrors > 0) setLineItemErrors(0); }}
+                  options={prOptions}
+                  defaultVendor={prHeader.vendor}
+                  disabled={status === 'submitted' || status === 'awaiting_approval'}
+                  onSelectInventory={() => setModalOpen(true)}
+                  onOpenGL={(itemId) => setGLDistributionRow(itemId)}
+                  onOpenBudget={(itemId) => setBudgetPopupRow(itemId)}
+                  onOpenBudgetReport={(itemId) => setBudgetReportRow(itemId)}
+                  onItemAdded={(description) => {
+                    addActivity('Item added', `Added ${description}`, 'data_entry', 'success');
+                    showToast('Item added successfully', 'success');
+                  }}
+                  onItemRemoved={() => showToast('Item removed', 'info')}
+                  onRequestQuote={(selectedItemIds) => handleCreateRFQ(selectedItemIds)}
+                />
+              </>
             )}
 
             {activeTab === 'RFQ' && (
@@ -1089,10 +979,6 @@ export function MainPurchaseRequestV2() {
 
       <AnimatePresence>
         {modalOpen && <PurchaseRequestModal onClose={() => setModalOpen(false)} onComplete={handleModalComplete} />}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {addItemModalOpen && <AddItemModal onClose={() => setAddItemModalOpen(false)} onSave={handleAddItemSave} />}
       </AnimatePresence>
 
       <AnimatePresence>

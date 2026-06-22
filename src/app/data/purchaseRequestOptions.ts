@@ -46,6 +46,20 @@ export const SHIPPING_METHOD_OPTIONS = [
   'Will call',
 ] as const;
 
+export const PR_OPTIONS_STORAGE_KEY = 'pr-options-v1';
+
+export function loadPurchaseRequestOptions(): PurchaseRequestOptionsState {
+  try {
+    const raw = localStorage.getItem(PR_OPTIONS_STORAGE_KEY);
+    if (raw) return { ...createDefaultPurchaseRequestOptions(), ...JSON.parse(raw) };
+  } catch { /* fall through */ }
+  return createDefaultPurchaseRequestOptions();
+}
+
+export function savePurchaseRequestOptions(opts: PurchaseRequestOptionsState): void {
+  try { localStorage.setItem(PR_OPTIONS_STORAGE_KEY, JSON.stringify(opts)); } catch { /* ignore */ }
+}
+
 export function createDefaultPurchaseRequestOptions(): PurchaseRequestOptionsState {
   return {
     allowFreeformVendorEntry: false,

@@ -14,6 +14,8 @@ import {
 } from '../../components/ui/select';
 import {
   createDefaultPurchaseRequestOptions,
+  loadPurchaseRequestOptions,
+  savePurchaseRequestOptions,
   SHIPPING_METHOD_OPTIONS,
   TAX_DIFF_OPTIONS,
   UOM_DEFAULT_OPTIONS,
@@ -177,8 +179,8 @@ function InlineSelect({
 }
 
 export function PurchaseRequestOptions() {
-  const [saved, setSaved] = useState(() => createDefaultPurchaseRequestOptions());
-  const [draft, setDraft] = useState(() => createDefaultPurchaseRequestOptions());
+  const [saved, setSaved] = useState(() => loadPurchaseRequestOptions());
+  const [draft, setDraft] = useState(() => loadPurchaseRequestOptions());
   const [showSavedToast, setShowSavedToast] = useState(false);
 
   const isDirty = JSON.stringify(saved) !== JSON.stringify(draft);
@@ -189,6 +191,7 @@ export function PurchaseRequestOptions() {
 
   const handleSave = () => {
     setSaved(draft);
+    savePurchaseRequestOptions(draft);
     setShowSavedToast(true);
     window.setTimeout(() => setShowSavedToast(false), 2400);
   };
