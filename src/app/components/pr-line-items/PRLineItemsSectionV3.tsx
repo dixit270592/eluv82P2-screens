@@ -13,7 +13,7 @@ type PRLineItemsSectionV3Props = {
   onOpenBudget?: (itemId: string) => void;
   onOpenBudgetReport?: (itemId: string) => void;
   onItemAdded?: (description: string) => void;
-  onItemRemoved?: () => void;
+  onItemRemoved?: (count?: number) => void;
   onRequestQuote?: (selectedItemIds: string[]) => void;
 };
 

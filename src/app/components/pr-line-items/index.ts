@@ -4,6 +4,7 @@ export { PRLineItemsSectionV3 } from './PRLineItemsSectionV3';
 export { PRLineItemsWithLayoutPicker } from './PRLineItemsWithLayoutPicker';
 export { LineItemsLayoutToggle } from './LineItemsLayoutToggle';
 export { LineItemSelectionBar } from './LineItemSelectionBar';
+export { DeleteConfirmPopover } from './DeleteConfirmPopover';
 export type { LineItemsLayoutVersion } from './LineItemsLayoutToggle';
 export type { PRLineItemsSectionHandle } from './PRLineItemsSection';
 export { LineItemFormModal } from './LineItemFormModal';

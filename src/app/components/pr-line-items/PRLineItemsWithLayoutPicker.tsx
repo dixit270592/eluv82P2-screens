@@ -1,9 +1,6 @@
-import { forwardRef, useState } from 'react';
+import { forwardRef } from 'react';
 import { createDefaultPurchaseRequestOptions, type PurchaseRequestOptionsState } from '../../data/purchaseRequestOptions';
-import { UI_FONT_STACK as F } from '../../tokens/typography';
-import { LineItemsLayoutToggle, type LineItemsLayoutVersion } from './LineItemsLayoutToggle';
-import { PRLineItemsSection, type PRLineItemsSectionHandle } from './PRLineItemsSection';
-import { PRLineItemsSectionV2 } from './PRLineItemsSectionV2';
+import type { PRLineItemsSectionHandle } from './PRLineItemsSection';
 import { PRLineItemsSectionV3 } from './PRLineItemsSectionV3';
 import type { PRLineItem } from './types';
 
@@ -17,77 +14,14 @@ type PRLineItemsWithLayoutPickerProps = {
   onOpenBudget?: (itemId: string) => void;
   onOpenBudgetReport?: (itemId: string) => void;
   onItemAdded?: (description: string) => void;
-  onItemRemoved?: () => void;
+  onItemRemoved?: (count?: number) => void;
   onRequestQuote?: (selectedItemIds: string[]) => void;
-  defaultLayout?: LineItemsLayoutVersion;
 };
 
+/** Line items section — V3 experience (expandable rows + auto-populate blank row). */
 export const PRLineItemsWithLayoutPicker = forwardRef<
   PRLineItemsSectionHandle,
   PRLineItemsWithLayoutPickerProps
->(function PRLineItemsWithLayoutPicker(
-  {
-    items,
-    onChange,
-    options = createDefaultPurchaseRequestOptions(),
-    disabled = false,
-    defaultVendor,
-    onOpenGL,
-    onOpenBudget,
-    onOpenBudgetReport,
-    onItemAdded,
-    onItemRemoved,
-    onRequestQuote,
-    defaultLayout = 'v1',
-  },
-  ref,
-) {
-  const [layout, setLayout] = useState<LineItemsLayoutVersion>(defaultLayout);
-
-  const sharedProps = {
-    items,
-    onChange,
-    options,
-    disabled,
-    defaultVendor,
-    onOpenGL,
-    onOpenBudget,
-    onOpenBudgetReport,
-    onItemAdded,
-    onItemRemoved,
-    onRequestQuote,
-  };
-
-  return (
-    <div>
-      <div
-        style={{
-          padding: '10px 16px',
-          borderBottom: '1px solid #F0F1F3',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          flexWrap: 'wrap',
-          background: '#FAFBFC',
-        }}
-      >
-        <LineItemsLayoutToggle value={layout} onChange={setLayout} />
-        <span style={{ fontSize: '12px', color: '#98A2B3', fontFamily: F }}>
-          {layout === 'v1'
-            ? 'Expand rows inline for full field visibility'
-            : layout === 'v2'
-              ? 'Scan compact rows · open a drawer for details'
-              : 'Complete the last row · a blank row appears automatically'}
-        </span>
-      </div>
-
-      {layout === 'v1' ? (
-        <PRLineItemsSection ref={ref} {...sharedProps} />
-      ) : layout === 'v2' ? (
-        <PRLineItemsSectionV2 ref={ref} {...sharedProps} />
-      ) : (
-        <PRLineItemsSectionV3 ref={ref} {...sharedProps} />
-      )}
-    </div>
-  );
+>(function PRLineItemsWithLayoutPicker(props, ref) {
+  return <PRLineItemsSectionV3 ref={ref} {...props} />;
 });

@@ -37,6 +37,7 @@ import type { PRLineItemsSectionHandle } from './PRLineItemsSection';
 import { Checkbox } from '../ui/checkbox';
 import { LINE_ITEM_CHECKBOX_CLASS } from './lineItemSelectionStyles';
 import { LineItemSelectionBar } from './LineItemSelectionBar';
+import { DeleteConfirmPopover } from './DeleteConfirmPopover';
 
 type InlineEdit = { id: string; field: 'description' | 'quantity' | 'cost' };
 
@@ -50,7 +51,7 @@ type PRLineItemsSectionV2Props = {
   onOpenBudget?: (itemId: string) => void;
   onOpenBudgetReport?: (itemId: string) => void;
   onItemAdded?: (description: string) => void;
-  onItemRemoved?: () => void;
+  onItemRemoved?: (count?: number) => void;
   onRequestQuote?: (selectedItemIds: string[]) => void;
 };
 
@@ -137,6 +138,10 @@ export const PRLineItemsSectionV2 = forwardRef<PRLineItemsSectionHandle, PRLineI
     const [inlineValue, setInlineValue] = useState('');
     const [focusMode, setFocusMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [deleteConfirm, setDeleteConfirm] = useState<{
+      ids: string[];
+      source: 'bulk';
+    } | null>(null);
     const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
     const windowWidth = useWindowWidth();
     const isMobile = windowWidth < 768;
@@ -196,11 +201,21 @@ export const PRLineItemsSectionV2 = forwardRef<PRLineItemsSectionHandle, PRLineI
 
     const bulkDeleteSelected = () => {
       if (selectedIds.size === 0 || disabled) return;
-      onChange(items.filter((i) => !selectedIds.has(i.id)));
-      if (detailItemId && selectedIds.has(detailItemId)) setDetailItemId(null);
-      setSelectedIds(new Set());
-      onItemRemoved?.();
+      setDeleteConfirm({ ids: Array.from(selectedIds), source: 'bulk' });
     };
+
+    const confirmDelete = () => {
+      if (!deleteConfirm?.ids.length || disabled) return;
+      const idsToRemove = new Set(deleteConfirm.ids);
+      onChange(items.filter((i) => !idsToRemove.has(i.id)));
+      if (detailItemId && idsToRemove.has(detailItemId)) setDetailItemId(null);
+      setSelectedIds(new Set());
+      setDeleteConfirm(null);
+      onItemRemoved?.(deleteConfirm.ids.length);
+    };
+
+    const cancelDelete = () => setDeleteConfirm(null);
+    const isBulkDeletePending = deleteConfirm?.source === 'bulk';
 
     const requestQuoteForSelected = () => {
       if (selectedIds.size === 0 || !onRequestQuote) return;
@@ -574,9 +589,12 @@ export const PRLineItemsSectionV2 = forwardRef<PRLineItemsSectionHandle, PRLineI
           count={selectedIds.size}
           disabled={disabled}
           showRequestQuote={Boolean(onRequestQuote)}
+          deletePending={isBulkDeletePending}
           onClear={clearSelection}
           onRequestQuote={onRequestQuote ? requestQuoteForSelected : undefined}
           onDelete={bulkDeleteSelected}
+          onConfirmDelete={confirmDelete}
+          onCancelDelete={cancelDelete}
         />
 
         {/* Compact table */}

@@ -775,7 +775,7 @@ export function MainPurchaseRequestV2() {
                   )}
                 </AnimatePresence>
 
-                {/* Layout version toggle for demo comparison */}
+                {/* Line items — V3 expandable rows with auto-populate */}
                 <PRLineItemsWithLayoutPicker
                   ref={lineItemsSectionRef}
                   items={lineItems}
@@ -790,7 +790,12 @@ export function MainPurchaseRequestV2() {
                     addActivity('Item added', `Added ${description}`, 'data_entry', 'success');
                     showToast('Item added successfully', 'success');
                   }}
-                  onItemRemoved={() => showToast('Item removed', 'info')}
+                  onItemRemoved={(count = 1) =>
+                    showToast(
+                      count === 1 ? 'Item deleted successfully' : `${count} items deleted successfully`,
+                      'success',
+                    )
+                  }
                   onRequestQuote={(selectedItemIds) => handleCreateRFQ(selectedItemIds)}
                 />
               </>

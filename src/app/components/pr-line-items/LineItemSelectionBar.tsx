@@ -1,22 +1,30 @@
 import { FileText, Trash2 } from 'lucide-react';
+import { AnimatePresence } from 'motion/react';
 import { UI_FONT_STACK as F } from '../../tokens/typography';
+import { DeleteConfirmPopover } from './DeleteConfirmPopover';
 
 type LineItemSelectionBarProps = {
   count: number;
   disabled?: boolean;
   showRequestQuote?: boolean;
+  deletePending?: boolean;
   onClear: () => void;
   onRequestQuote?: () => void;
   onDelete: () => void;
+  onConfirmDelete?: () => void;
+  onCancelDelete?: () => void;
 };
 
 export function LineItemSelectionBar({
   count,
   disabled,
   showRequestQuote,
+  deletePending = false,
   onClear,
   onRequestQuote,
   onDelete,
+  onConfirmDelete,
+  onCancelDelete,
 }: LineItemSelectionBarProps) {
   if (count <= 0) return null;
 
@@ -52,21 +60,36 @@ export function LineItemSelectionBar({
         {showRequestQuote && onRequestQuote && (
           <span style={dividerStyle} aria-hidden />
         )}
-        <button
-          type="button"
-          onClick={onDelete}
-          disabled={disabled}
-          style={actionButtonStyle}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = '#F9FAFB';
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-          }}
+        <div
+          style={{ position: 'relative', display: 'inline-flex' }}
+          data-delete-confirm={deletePending ? true : undefined}
         >
-          <Trash2 size={14} color="#667085" strokeWidth={2} aria-hidden />
-          Delete line item{count !== 1 ? 's' : ''}
-        </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={disabled}
+            style={actionButtonStyle}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = '#F9FAFB';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+            }}
+          >
+            <Trash2 size={14} color="#667085" strokeWidth={2} aria-hidden />
+            Delete line item{count !== 1 ? 's' : ''}
+          </button>
+          <AnimatePresence>
+            {deletePending && onConfirmDelete && onCancelDelete && (
+              <DeleteConfirmPopover
+                count={count}
+                placement="below"
+                onConfirm={onConfirmDelete}
+                onCancel={onCancelDelete}
+              />
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );
@@ -81,6 +104,8 @@ const barStyle: React.CSSProperties = {
   gap: '10px',
   flexWrap: 'wrap',
   flexShrink: 0,
+  position: 'relative',
+  zIndex: 2,
 };
 
 const countStyle: React.CSSProperties = {

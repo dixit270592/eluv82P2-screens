@@ -79,12 +79,53 @@ const labelStyle: React.CSSProperties = {
 
 const sectionTitleStyle: React.CSSProperties = {
   margin: 0,
-  fontSize: '13px',
+  fontSize: '15px',
   fontWeight: 600,
   color: '#101828',
   fontFamily: F,
   letterSpacing: '-0.01em',
 };
+
+type Breakpoint = 'mobile' | 'tablet' | 'desktop';
+
+function useBreakpoint(): Breakpoint {
+  const [breakpoint, setBreakpoint] = useState<Breakpoint>(() => {
+    if (typeof window === 'undefined') return 'desktop';
+    const w = window.innerWidth;
+    if (w < 768) return 'mobile';
+    if (w < 1100) return 'tablet';
+    return 'desktop';
+  });
+
+  useEffect(() => {
+    const mobileQuery = window.matchMedia('(max-width: 767px)');
+    const tabletQuery = window.matchMedia('(min-width: 768px) and (max-width: 1099px)');
+
+    const update = () => {
+      if (mobileQuery.matches) setBreakpoint('mobile');
+      else if (tabletQuery.matches) setBreakpoint('tablet');
+      else setBreakpoint('desktop');
+    };
+
+    update();
+    mobileQuery.addEventListener('change', update);
+    tabletQuery.addEventListener('change', update);
+    window.addEventListener('resize', update);
+    return () => {
+      mobileQuery.removeEventListener('change', update);
+      tabletQuery.removeEventListener('change', update);
+      window.removeEventListener('resize', update);
+    };
+  }, []);
+
+  return breakpoint;
+}
+
+function gridColumns(breakpoint: Breakpoint, maxCols = 3): string {
+  if (breakpoint === 'mobile') return '1fr';
+  if (breakpoint === 'tablet') return 'repeat(2, minmax(0, 1fr))';
+  return `repeat(${maxCols}, minmax(0, 1fr))`;
+}
 
 export function LineItemFormModal({
   mode,
@@ -104,10 +145,17 @@ export function LineItemFormModal({
     Array<{ account: string; name: string; amount: number; percentage: number }>
   >([]);
   const [focused, setFocused] = useState<string | null>(null);
-  const [openSections, setOpenSections] = useState({ vendor: true, accounting: false });
+  const [openSections, setOpenSections] = useState({ vendor: true, accounting: true });
 
   const dialogRef = useRef<HTMLDivElement>(null);
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const breakpoint = useBreakpoint();
+  const isMobile = breakpoint === 'mobile';
+  const modalWidth =
+    breakpoint === 'mobile'
+      ? '100%'
+      : breakpoint === 'tablet'
+        ? 'min(720px, calc(100vw - 40px))'
+        : 'min(920px, calc(100vw - 48px))';
 
   useEffect(() => {
     setForm({ ...emptyForm(options), ...initial });
@@ -115,8 +163,8 @@ export function LineItemFormModal({
     setTouched({});
     setGLAccounts([]);
     setOpenSections({
-      vendor: Boolean(initial?.vendor),
-      accounting: Boolean(initial?.glAccount || initial?.projectAccount),
+      vendor: true,
+      accounting: true,
     });
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -518,24 +566,20 @@ export function LineItemFormModal({
     (k) => touched[k as LineItemFieldKey] && errors[k as LineItemFieldKey],
   ).length;
 
-  const toggleSection = (key: 'vendor' | 'accounting') => {
-    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
   const SectionAccordion = ({
     sectionKey,
     title,
-    subtitle,
     isOpen,
     onToggle,
     children,
+    columns = 3,
   }: {
     sectionKey: string;
     title: string;
-    subtitle?: string;
     isOpen: boolean;
     onToggle: () => void;
     children: React.ReactNode;
+    columns?: number;
   }) => (
     <div
       style={{
@@ -543,6 +587,7 @@ export function LineItemFormModal({
         borderRadius: '10px',
         overflow: 'hidden',
         background: '#FFFFFF',
+        marginBottom: '12px',
       }}
     >
       <button
@@ -575,11 +620,6 @@ export function LineItemFormModal({
         />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={sectionTitleStyle}>{title}</div>
-          {subtitle && (
-            <div style={{ fontSize: '11px', color: '#98A2B3', fontFamily: F, marginTop: '2px' }}>
-              {subtitle}
-            </div>
-          )}
         </div>
       </button>
       <AnimatePresence initial={false}>
@@ -597,8 +637,8 @@ export function LineItemFormModal({
                 padding: '14px',
                 borderTop: '1px solid #EEF1F5',
                 display: 'grid',
-                gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
-                gap: '14px 16px',
+                gridTemplateColumns: gridColumns(breakpoint, columns),
+                gap: breakpoint === 'mobile' ? '12px' : '14px 16px',
               }}
             >
               {children}
@@ -608,6 +648,74 @@ export function LineItemFormModal({
       </AnimatePresence>
     </div>
   );
+
+  const FormSection = ({
+    sectionKey,
+    title,
+    children,
+    columns = 3,
+    collapsible = false,
+    isOpen = true,
+    onToggle,
+  }: {
+    sectionKey: string;
+    title: string;
+    children: React.ReactNode;
+    columns?: number;
+    collapsible?: boolean;
+    isOpen?: boolean;
+    onToggle?: () => void;
+  }) => {
+    const content = (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: gridColumns(breakpoint, columns),
+          gap: breakpoint === 'mobile' ? '12px' : '14px 16px',
+        }}
+      >
+        {children}
+      </div>
+    );
+
+    if (collapsible) {
+      return (
+        <SectionAccordion
+          sectionKey={sectionKey}
+          title={title}
+          isOpen={isOpen}
+          onToggle={onToggle ?? (() => undefined)}
+          columns={columns}
+        >
+          {children}
+        </SectionAccordion>
+      );
+    }
+
+    return (
+      <section
+        aria-labelledby={`li-section-heading-${sectionKey}`}
+        style={{ marginBottom: sectionKey === 'accounting' ? 0 : '18px' }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            gap: '12px',
+            marginBottom: '10px',
+          }}
+        >
+          <div>
+            <h3 id={`li-section-heading-${sectionKey}`} style={sectionTitleStyle}>
+              {title}
+            </h3>
+          </div>
+        </div>
+        {content}
+      </section>
+    );
+  };
 
   return (
     <>
@@ -622,9 +730,9 @@ export function LineItemFormModal({
           background: 'rgba(16,24,40,0.4)',
           display: 'flex',
           alignItems: isMobile ? 'flex-end' : 'center',
-          justifyContent: isMobile ? 'stretch' : 'flex-end',
+          justifyContent: 'center',
           zIndex: 200,
-          padding: isMobile ? 0 : '20px',
+          padding: isMobile ? 0 : '24px',
           backdropFilter: 'blur(3px)',
         }}
         onClick={(e) => {
@@ -633,31 +741,31 @@ export function LineItemFormModal({
       >
         <motion.div
           ref={dialogRef}
-          initial={isMobile ? { y: '100%' } : { x: 40, opacity: 0 }}
-          animate={isMobile ? { y: 0 } : { x: 0, opacity: 1 }}
-          exit={isMobile ? { y: '100%' } : { x: 40, opacity: 0 }}
-          transition={{ duration: 0.24, ease: [0.4, 0, 0.2, 1] }}
+          initial={isMobile ? { y: '100%' } : { scale: 0.96, opacity: 0 }}
+          animate={isMobile ? { y: 0 } : { scale: 1, opacity: 1 }}
+          exit={isMobile ? { y: '100%' } : { scale: 0.96, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
           role="dialog"
           aria-modal="true"
           aria-labelledby="li-modal-title"
           style={{
-            width: isMobile ? '100%' : 'min(520px, 100%)',
-            maxHeight: isMobile ? '92dvh' : '100%',
-            height: isMobile ? 'auto' : '100%',
+            width: modalWidth,
+            maxHeight: isMobile ? '92dvh' : 'min(860px, calc(100vh - 40px))',
             background: '#FFFFFF',
-            borderRadius: isMobile ? '16px 16px 0 0' : '12px 0 0 12px',
-            boxShadow: '-12px 0 40px rgba(16,24,40,0.12)',
+            borderRadius: isMobile ? '16px 16px 0 0' : '12px',
+            boxShadow: isMobile
+              ? '0 -8px 32px rgba(16,24,40,0.12)'
+              : '0 20px 48px rgba(16,24,40,0.16), 0 0 0 1px rgba(16,24,40,0.04)',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
             border: isMobile ? 'none' : '1px solid #E4E7EC',
-            borderRight: 'none',
           }}
         >
           {/* Header */}
           <div
             style={{
-              padding: '18px 20px 16px',
+              padding: isMobile ? '18px 20px 16px' : '20px 24px 16px',
               borderBottom: '1px solid #EEF1F5',
               flexShrink: 0,
               background: '#FFFFFF',
@@ -769,146 +877,106 @@ export function LineItemFormModal({
           </AnimatePresence>
 
           {/* Body */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px 20px' }}>
-            {/* Core fields — always visible */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
-                gap: '14px 16px',
-                marginBottom: '16px',
-              }}
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              padding: isMobile ? '14px 16px 16px' : '18px 24px 20px',
+            }}
+          >
+            <FormSection
+              sectionKey="basic"
+              title={SECTION_LABELS.basic}
+              columns={3}
             >
               {sections.basic.map((field) => renderField(field.key, field.label, field.required))}
-            </div>
+            </FormSection>
 
-            {/* Pricing strip */}
             {sections.pricing.length > 0 && (
-              <div
-                style={{
-                  padding: '14px 16px',
-                  borderRadius: '10px',
-                  background: '#FAFBFC',
-                  border: '1px solid #EEF1F5',
-                  marginBottom: '16px',
-                }}
+              <FormSection
+                sectionKey="pricing"
+                title={SECTION_LABELS.pricing}
+                columns={Math.min(sections.pricing.length, 3)}
               >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: '12px',
-                    gap: '12px',
-                  }}
-                >
-                  <span style={{ ...sectionTitleStyle, fontSize: '12px', color: '#667085' }}>
-                    {SECTION_LABELS.pricing}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: '13px',
-                      fontWeight: 700,
-                      color: P2P_BRAND.primaryStrong,
-                      fontFamily: F,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {fmtRs(subtotalPreview)}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: isMobile ? '1fr' : `repeat(${Math.min(sections.pricing.length, 3)}, 1fr)`,
-                    gap: '14px',
-                  }}
-                >
-                  {sections.pricing.map((field) =>
-                    renderField(field.key, field.label, field.required),
-                  )}
-                </div>
-                {form.quantity > 0 && form.cost >= 0 && (
-                  <p style={{ margin: '10px 0 0', fontSize: '11px', color: '#98A2B3', fontFamily: F }}>
-                    {form.quantity} × {fmtRs(form.cost)} = {fmtRs(subtotalPreview)}
-                  </p>
+                {sections.pricing.map((field) =>
+                  renderField(field.key, field.label, field.required),
                 )}
-              </div>
+              </FormSection>
             )}
 
-            {/* Collapsible optional sections */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {hasVendorSection && (
-                <SectionAccordion
-                  sectionKey="vendor"
-                  title={SECTION_LABELS.vendor}
-                  subtitle="Vendor, terms, and delivery date"
-                  isOpen={openSections.vendor}
-                  onToggle={() => toggleSection('vendor')}
-                >
-                  {sections.vendor.map((field) =>
-                    renderField(field.key, field.label, field.required),
-                  )}
-                </SectionAccordion>
-              )}
+            {hasVendorSection && (
+              <FormSection
+                sectionKey="vendor"
+                title={SECTION_LABELS.vendor}
+                columns={3}
+                collapsible={isMobile}
+                isOpen={openSections.vendor}
+                onToggle={() => setOpenSections((s) => ({ ...s, vendor: !s.vendor }))}
+              >
+                {sections.vendor.map((field) =>
+                  renderField(field.key, field.label, field.required),
+                )}
+              </FormSection>
+            )}
 
-              {hasAccountingSection && (
-                <SectionAccordion
-                  sectionKey="accounting"
-                  title={SECTION_LABELS.accounting}
-                  subtitle="GL account and project allocation"
-                  isOpen={openSections.accounting}
-                  onToggle={() => toggleSection('accounting')}
-                >
-                  {sections.accounting.map((field) =>
-                    renderField(field.key, field.label, field.required),
-                  )}
-                  <div style={{ gridColumn: '1 / -1', paddingTop: '4px' }}>
-                    <button
-                      type="button"
-                      onClick={() => setShowGLModal(true)}
-                      style={{
-                        height: '36px',
-                        padding: '0 14px',
-                        background: '#FFFFFF',
-                        border: '1px solid #E4E7EC',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        color: '#344054',
-                        fontFamily: F,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        transition: 'border-color 0.12s, background 0.12s',
-                      }}
-                      onMouseEnter={(e) => {
-                        const el = e.currentTarget as HTMLElement;
-                        el.style.borderColor = P2P_BRAND.surfaceBorder;
-                        el.style.background = P2P_BRAND.surface;
-                      }}
-                      onMouseLeave={(e) => {
-                        const el = e.currentTarget as HTMLElement;
-                        el.style.borderColor = '#E4E7EC';
-                        el.style.background = '#FFFFFF';
-                      }}
-                    >
-                      <Plus size={13} strokeWidth={2.5} aria-hidden />
-                      {form.glAccountsCount > 1
-                        ? `${form.glAccountsCount} GL accounts configured`
-                        : 'Split across multiple GL accounts'}
-                    </button>
-                  </div>
-                </SectionAccordion>
-              )}
-            </div>
+            {hasAccountingSection && (
+              <FormSection
+                sectionKey="accounting"
+                title={SECTION_LABELS.accounting}
+                columns={3}
+                collapsible={isMobile}
+                isOpen={openSections.accounting}
+                onToggle={() => setOpenSections((s) => ({ ...s, accounting: !s.accounting }))}
+              >
+                {sections.accounting.map((field) =>
+                  renderField(field.key, field.label, field.required),
+                )}
+                <div style={{ gridColumn: breakpoint === 'mobile' ? '1' : '1 / -1' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowGLModal(true)}
+                    style={{
+                      height: '36px',
+                      padding: '0 14px',
+                      background: '#FFFFFF',
+                      border: '1px solid #E4E7EC',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: '#344054',
+                      fontFamily: F,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'border-color 0.12s, background 0.12s',
+                    }}
+                    onMouseEnter={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      el.style.borderColor = P2P_BRAND.surfaceBorder;
+                      el.style.background = P2P_BRAND.surface;
+                    }}
+                    onMouseLeave={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      el.style.borderColor = '#E4E7EC';
+                      el.style.background = '#FFFFFF';
+                    }}
+                  >
+                    <Plus size={13} strokeWidth={2.5} aria-hidden />
+                    {form.glAccountsCount > 1
+                      ? `${form.glAccountsCount} GL accounts configured`
+                      : 'Split across multiple GL accounts'}
+                  </button>
+                </div>
+              </FormSection>
+            )}
           </div>
 
           {/* Footer */}
           <div
             style={{
-              padding: '14px 20px',
+              padding: isMobile ? '14px 20px' : '14px 24px',
               borderTop: '1px solid #EEF1F5',
               display: 'flex',
               alignItems: 'center',

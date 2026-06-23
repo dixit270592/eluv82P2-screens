@@ -46,6 +46,7 @@ import type { PRLineItem } from './types';
 import { Checkbox } from '../ui/checkbox';
 import { LINE_ITEM_CHECKBOX_CLASS } from './lineItemSelectionStyles';
 import { LineItemSelectionBar } from './LineItemSelectionBar';
+import { DeleteConfirmPopover } from './DeleteConfirmPopover';
 
 // ─── Currency ───────────────────────────────────────────────────────────────
 export const fmtRs = (n: number) =>
@@ -71,7 +72,7 @@ type PRLineItemsSectionProps = {
   onOpenBudget?: (itemId: string) => void;
   onOpenBudgetReport?: (itemId: string) => void;
   onItemAdded?: (description: string) => void;
-  onItemRemoved?: () => void;
+  onItemRemoved?: (count?: number) => void;
   onRequestQuote?: (selectedItemIds: string[]) => void;
   /** When true, appends a blank row after the last row is fully valid (V3). */
   autoPopulateBlankRow?: boolean;
@@ -180,6 +181,10 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
     const [showViewMenu, setShowViewMenu] = useState(false);
     const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [deleteConfirm, setDeleteConfirm] = useState<{
+      ids: string[];
+      source: 'row' | 'bulk';
+    } | null>(null);
     const viewMenuRef = useRef<HTMLDivElement>(null);
     const actionMenuRef = useRef<HTMLDivElement>(null);
     const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -249,9 +254,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
 
     const bulkDeleteSelected = () => {
       if (selectedIds.size === 0 || disabled) return;
-      onChange(items.filter((i) => !selectedIds.has(i.id)));
-      setSelectedIds(new Set());
-      onItemRemoved?.();
+      setDeleteConfirm({ ids: Array.from(selectedIds), source: 'bulk' });
     };
 
     const requestQuoteForSelected = () => {
@@ -267,6 +270,16 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       return n + (getErrorCount(i, itemIndex) > 0 ? 1 : 0);
     }, 0);
     const filledItemCount = itemsForValidation.length;
+    const showAddItemButton = !autoPopulateBlankRow || filledItemCount === 0;
+
+    const finalizeItemsAfterRemoval = useCallback(
+      (next: PRLineItem[]) => {
+        if (!autoPopulateBlankRow) return next;
+        if (filledLineItems(next).length === 0) return [];
+        return next;
+      },
+      [autoPopulateBlankRow],
+    );
 
     // ── Expose imperative handle ──────────────────────────────────────────────
     useImperativeHandle(ref, () => ({
@@ -291,6 +304,24 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
 
     // ── Close view / action menus on outside click ────────────────────────────
     useEffect(() => {
+      if (!deleteConfirm) return;
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') setDeleteConfirm(null);
+      };
+      const onPointerDown = (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('[data-delete-confirm]')) return;
+        setDeleteConfirm(null);
+      };
+      document.addEventListener('keydown', onKey);
+      document.addEventListener('mousedown', onPointerDown);
+      return () => {
+        document.removeEventListener('keydown', onKey);
+        document.removeEventListener('mousedown', onPointerDown);
+      };
+    }, [deleteConfirm]);
+
+    useEffect(() => {
       if (!showViewMenu && !openActionMenuId) return;
       const handler = (e: MouseEvent) => {
         if (showViewMenu && viewMenuRef.current && !viewMenuRef.current.contains(e.target as Node)) {
@@ -308,16 +339,11 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       return () => document.removeEventListener('mousedown', handler);
     }, [showViewMenu, openActionMenuId]);
 
-    // ── V3: auto-append blank row when last filled row is complete ───────────
+    // ── V3: auto-append blank row after the first filled item is complete ─────
     useEffect(() => {
       if (!autoPopulateBlankRow || disabled) return;
 
-      if (items.length === 0) {
-        const blank = createBlankLineItem(`blank-${Date.now()}`, defaultVendor, options);
-        onChange([blank]);
-        setExpandedIds((prev) => new Set([...prev, blank.id]));
-        return;
-      }
+      if (filledLineItems(items).length === 0) return;
 
       const last = items[items.length - 1];
       if (isBlankLineItem(last)) return;
@@ -414,6 +440,73 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       const next = [...items];
       next.splice(idx + 1, 0, copy);
       onChange(next);
+    };
+
+    const requestRowDelete = (id: string) => {
+      if (disabled) return;
+      setDeleteConfirm({ ids: [id], source: 'row' });
+      setOpenActionMenuId(null);
+    };
+
+    const isRowDeletePending = (id: string) =>
+      deleteConfirm?.source === 'row' &&
+      deleteConfirm.ids.length === 1 &&
+      deleteConfirm.ids[0] === id;
+
+    const isBulkDeletePending = deleteConfirm?.source === 'bulk';
+
+    const renderRowDeleteAction = (item: PRLineItem, index: number) => {
+      if (autoPopulateBlankRow && isTrailingBlankItem(items, item, index)) return null;
+
+      const pending = isRowDeletePending(item.id);
+      const placement = index >= filteredItems.length - 2 ? 'above' : 'below';
+
+      return (
+        <div
+          style={{ position: 'relative', display: 'inline-flex' }}
+          data-delete-confirm={pending ? true : undefined}
+        >
+          <button
+            type="button"
+            onClick={() => requestRowDelete(item.id)}
+            disabled={disabled}
+            title="Remove item"
+            style={iconButtonStyle}
+          >
+            <Trash2 size={14} color="#F04438" strokeWidth={2} />
+          </button>
+          <AnimatePresence>
+            {pending && (
+              <DeleteConfirmPopover
+                count={1}
+                placement={placement}
+                onConfirm={confirmDelete}
+                onCancel={cancelDelete}
+              />
+            )}
+          </AnimatePresence>
+        </div>
+      );
+    };
+
+    const confirmDelete = () => {
+      if (!deleteConfirm?.ids.length || disabled) return;
+      const idsToRemove = new Set(deleteConfirm.ids);
+      onChange(finalizeItemsAfterRemoval(items.filter((i) => !idsToRemove.has(i.id))));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        deleteConfirm.ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      setDeleteConfirm(null);
+      onItemRemoved?.(deleteConfirm.ids.length);
+    };
+
+    const cancelDelete = () => setDeleteConfirm(null);
+
+    const handleRowEdit = (item: PRLineItem) => {
+      if (disabled) return;
+      setFormModal({ mode: 'edit', itemId: item.id });
     };
 
     // ── Shared inline cell ────────────────────────────────────────────────────
@@ -526,6 +619,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       const isExpanded = expandedIds.has(item.id);
       const errorCount = getErrorCount(item, index);
       const itemErrors = getItemErrors(item);
+      const isDraftRow = autoPopulateBlankRow && isTrailingBlankItem(items, item, index);
 
       return (
         <div
@@ -535,7 +629,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
             border: errorCount > 0 ? '1.5px solid #FECDCA' : selectedIds.has(item.id) ? '1px solid #E4E7EC' : '1px solid #E4E7EC',
             borderRadius: '10px',
             marginBottom: '10px',
-            overflow: 'hidden',
+            overflow: isRowDeletePending(item.id) ? 'visible' : 'hidden',
           }}
         >
           {/* Card header row */}
@@ -617,7 +711,19 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
               </div>
             </div>
 
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => handleRowEdit(item)}
+                  disabled={disabled}
+                  title="Edit all fields"
+                  style={iconButtonStyle}
+                >
+                  <Edit3 size={14} color="#667085" strokeWidth={2} />
+                </button>
+                {renderRowDeleteAction(item, index)}
+              </div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#101828', fontFamily: F }}>
                 {fmtRs(item.subtotal)}
               </div>
@@ -671,19 +777,21 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                     </div>
                   </div>
 
-                {/* Card actions */}
+                {/* Card actions — secondary only; Edit/Remove live in the card header */}
                 <div style={expandedDetailFooterStyle}>
-                  <button
-                    type="button"
-                    onClick={() => setFormModal({ mode: 'edit', itemId: item.id })}
-                    style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
-                  >
-                    <Edit3 size={13} strokeWidth={2} aria-hidden />
-                    Edit all fields
-                  </button>
                   {onOpenGL && (
                     <button type="button" onClick={() => onOpenGL(item.id)} style={glChipStyle}>
                       {item.glAccountsCount || 1} GL
+                    </button>
+                  )}
+                  {onOpenBudget && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenBudget(item.id)}
+                      style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
+                    >
+                      <DollarSign size={13} color="#EF4444" strokeWidth={2} />
+                      Budget
                     </button>
                   )}
                   <button
@@ -695,15 +803,6 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                   >
                     <Copy size={13} color="#667085" strokeWidth={2} />
                     Duplicate
-                  </button>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => { onChange(items.filter((i) => i.id !== item.id)); onItemRemoved?.(); }}
-                    style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px', color: '#F04438', borderColor: '#FECDCA', marginLeft: 'auto' }}
-                  >
-                    <Trash2 size={13} color="#F04438" strokeWidth={2} />
-                    <span style={{ fontSize: '12px', fontFamily: F, color: '#F04438' }}>Remove</span>
                   </button>
                 </div>
                 </div>
@@ -731,7 +830,9 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       }
     };
 
-    const desktopColCount = (showTax ? 12 : 11);
+    const isV3Layout = autoPopulateBlankRow;
+    const desktopColCount = isV3Layout ? 8 : showTax ? 12 : 11;
+    const tableMinWidth = isV3Layout ? '640px' : '1080px';
 
     // ── Render ────────────────────────────────────────────────────────────────
     return (
@@ -911,19 +1012,21 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
 
           <div style={{ flex: 1 }} />
 
-          <button
-            type="button"
-            onClick={() => setFormModal({ mode: 'add' })}
-            disabled={disabled}
-            style={{
-              ...primaryButtonStyle,
-              opacity: disabled ? 0.5 : 1,
-              cursor: disabled ? 'not-allowed' : 'pointer',
-            }}
-          >
-            <Plus size={14} strokeWidth={2.5} aria-hidden />
-            {isMobile ? 'Add' : 'Add item'}
-          </button>
+          {showAddItemButton && (
+            <button
+              type="button"
+              onClick={() => setFormModal({ mode: 'add' })}
+              disabled={disabled}
+              style={{
+                ...primaryButtonStyle,
+                opacity: disabled ? 0.5 : 1,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <Plus size={14} strokeWidth={2.5} aria-hidden />
+              {isMobile ? 'Add' : 'Add item'}
+            </button>
+          )}
         </div>
 
         {/* Bulk selection bar */}
@@ -931,16 +1034,23 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
           count={selectedIds.size}
           disabled={disabled}
           showRequestQuote={Boolean(onRequestQuote)}
+          deletePending={isBulkDeletePending}
           onClear={clearSelection}
           onRequestQuote={onRequestQuote ? requestQuoteForSelected : undefined}
           onDelete={bulkDeleteSelected}
+          onConfirmDelete={confirmDelete}
+          onCancelDelete={cancelDelete}
         />
 
         {/* Mobile card list */}
         {isMobile ? (
           <div style={{ padding: '12px 14px' }}>
             {filteredItems.length === 0 ? (
-              <EmptyState searchQuery={searchQuery} onAdd={() => setFormModal({ mode: 'add' })} />
+              <EmptyState
+                searchQuery={searchQuery}
+                onAdd={() => setFormModal({ mode: 'add' })}
+                hideAddButton={!showAddItemButton}
+              />
             ) : (
               filteredItems.map((item) => (
                 <MobileCard
@@ -953,11 +1063,17 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
           </div>
         ) : (
           /* Desktop table */
-          <div style={{ overflowX: 'auto', flex: focusMode ? 1 : undefined, overflowY: focusMode ? 'auto' : undefined }}>
+          <div
+            style={{
+              overflowX: isV3Layout ? 'visible' : 'auto',
+              flex: focusMode ? 1 : undefined,
+              overflowY: focusMode ? 'auto' : deleteConfirm?.source === 'row' ? 'visible' : undefined,
+            }}
+          >
             <table
               role="table"
               aria-label="Line items"
-              style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1080px' }}
+              style={{ width: '100%', borderCollapse: 'collapse', minWidth: tableMinWidth }}
             >
               <thead>
                 <tr
@@ -979,15 +1095,31 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                   </th>
                   <th style={{ width: '40px', padding: '10px 8px 10px 0' }} />
                   <th style={{ ...thStyle, width: '40px' }}>#</th>
-                  <th style={{ ...thStyle, minWidth: '200px' }}>Description</th>
-                  <th style={{ ...thStyle, minWidth: '140px' }}>GL account</th>
-                  <th style={{ ...thStyle, width: '120px' }}>Vendor</th>
-                  <th style={{ ...thStyle, width: '96px' }}>Required by</th>
+                  <th style={{ ...thStyle, minWidth: isV3Layout ? '180px' : '200px' }}>Description</th>
+                  {!isV3Layout && (
+                    <>
+                      <th style={{ ...thStyle, minWidth: '140px' }}>GL account</th>
+                      <th style={{ ...thStyle, width: '120px' }}>Vendor</th>
+                      <th style={{ ...thStyle, width: '96px' }}>Required by</th>
+                    </>
+                  )}
                   <th style={{ ...thStyle, width: '64px' }}>Qty</th>
                   <th style={{ ...thStyle, width: '100px' }}>Unit cost</th>
-                  {showTax && <th style={{ ...thStyle, width: '88px' }}>Tax</th>}
+                  {!isV3Layout && showTax && <th style={{ ...thStyle, width: '88px' }}>Tax</th>}
                   <th style={{ ...thStyle, width: '104px' }}>Subtotal</th>
-                  <th style={{ width: '108px', padding: '10px 14px' }} />
+                  <th
+                    style={{
+                      width: isV3Layout ? '96px' : '108px',
+                      padding: '10px 14px',
+                      ...(isV3Layout
+                        ? { position: 'sticky', right: 0, background: '#F9FAFB', zIndex: 1 }
+                        : {}),
+                    }}
+                  >
+                    {isV3Layout && (
+                      <span style={{ ...thStyle, padding: 0 }}>Actions</span>
+                    )}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1035,7 +1167,21 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                                   ? 'inset 2px 0 0 #E4E7EC'
                                   : 'none',
                             transition: 'background 0.1s, box-shadow 0.1s',
+                            cursor: isV3Layout ? 'pointer' : undefined,
                           }}
+                          onClick={
+                            isV3Layout
+                              ? (e) => {
+                                  const target = e.target as HTMLElement;
+                                  if (
+                                    target.closest('button, input, [role="checkbox"], [role="button"]')
+                                  ) {
+                                    return;
+                                  }
+                                  toggleExpand(item.id);
+                                }
+                              : undefined
+                          }
                           onMouseEnter={() => setHoveredRow(item.id)}
                           onMouseLeave={() => setHoveredRow(null)}
                         >
@@ -1099,15 +1245,33 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                                     bold
                                   />
                                   {!isExpanded && (
+                                  <>
                                     <span style={typeChipStyle}>{item.type || 'Goods'}</span>
-                                  )}
-                                </div>
-                                {!isExpanded && item.unitOfMeasure && (
-                                  <div style={{ fontSize: '11px', color: '#98A2B3', fontFamily: F, marginTop: '3px' }}>
-                                    {item.quantity} {item.unitOfMeasure.toLowerCase()}
-                                    {item.vendorTerms ? ` · ${item.vendorTerms}` : ''}
-                                  </div>
+                                    {isV3Layout && item.vendor && (
+                                      <span
+                                        style={{
+                                          fontSize: '11px',
+                                          color: '#98A2B3',
+                                          fontFamily: F,
+                                          whiteSpace: 'nowrap',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          maxWidth: '120px',
+                                        }}
+                                      >
+                                        {item.vendor}
+                                      </span>
+                                    )}
+                                  </>
                                 )}
+                              </div>
+                              {!isExpanded && item.unitOfMeasure && (
+                                <div style={{ fontSize: '11px', color: '#98A2B3', fontFamily: F, marginTop: '3px' }}>
+                                  {item.quantity} {item.unitOfMeasure.toLowerCase()}
+                                  {!isV3Layout && item.vendorTerms ? ` · ${item.vendorTerms}` : ''}
+                                  {isV3Layout && gl.code ? ` · GL ${gl.code}` : ''}
+                                </div>
+                              )}
                               </div>
                               {errorCount > 0 && (
                                 <span
@@ -1135,53 +1299,57 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                             </div>
                           </td>
 
-                          {/* GL account */}
-                          <td style={{ padding: '12px 14px', maxWidth: '180px' }}>
-                            <button
-                              type="button"
-                              onClick={() => onOpenGL?.(item.id)}
-                              disabled={!onOpenGL}
-                              title={item.glAccount}
-                              style={{
-                                border: 'none',
-                                background: 'none',
-                                padding: 0,
-                                cursor: onOpenGL ? 'pointer' : 'default',
-                                textAlign: 'left',
-                                maxWidth: '100%',
-                              }}
-                            >
-                              <span style={glCodeChipStyle}>{gl.code}</span>
-                              {gl.name && (
-                                <div
+                          {!isV3Layout && (
+                            <>
+                              {/* GL account */}
+                              <td style={{ padding: '12px 14px', maxWidth: '180px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenGL?.(item.id)}
+                                  disabled={!onOpenGL}
+                                  title={item.glAccount}
                                   style={{
-                                    fontSize: '11px',
-                                    color: '#667085',
-                                    fontFamily: F,
-                                    marginTop: '3px',
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
+                                    border: 'none',
+                                    background: 'none',
+                                    padding: 0,
+                                    cursor: onOpenGL ? 'pointer' : 'default',
+                                    textAlign: 'left',
+                                    maxWidth: '100%',
                                   }}
                                 >
-                                  {gl.name}
-                                  {(item.glAccountsCount || 1) > 1
-                                    ? ` · +${(item.glAccountsCount || 1) - 1} more`
-                                    : ''}
-                                </div>
-                              )}
-                            </button>
-                          </td>
+                                  <span style={glCodeChipStyle}>{gl.code}</span>
+                                  {gl.name && (
+                                    <div
+                                      style={{
+                                        fontSize: '11px',
+                                        color: '#667085',
+                                        fontFamily: F,
+                                        marginTop: '3px',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                      }}
+                                    >
+                                      {gl.name}
+                                      {(item.glAccountsCount || 1) > 1
+                                        ? ` · +${(item.glAccountsCount || 1) - 1} more`
+                                        : ''}
+                                    </div>
+                                  )}
+                                </button>
+                              </td>
 
-                          {/* Vendor */}
-                          <td style={{ padding: '12px 14px', fontSize: '13px', color: '#344054', fontFamily: F, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>
-                            {item.vendor}
-                          </td>
+                              {/* Vendor */}
+                              <td style={{ padding: '12px 14px', fontSize: '13px', color: '#344054', fontFamily: F, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>
+                                {item.vendor}
+                              </td>
 
-                          {/* Required by */}
-                          <td style={{ padding: '12px 14px', fontSize: '12px', color: requiredByLabel ? '#344054' : '#98A2B3', fontFamily: F, whiteSpace: 'nowrap' }}>
-                            {requiredByLabel || '—'}
-                          </td>
+                              {/* Required by */}
+                              <td style={{ padding: '12px 14px', fontSize: '12px', color: requiredByLabel ? '#344054' : '#98A2B3', fontFamily: F, whiteSpace: 'nowrap' }}>
+                                {requiredByLabel || '—'}
+                              </td>
+                            </>
+                          )}
 
                           {/* Qty - inline editable */}
                           <td style={{ padding: '12px 14px' }}>
@@ -1204,7 +1372,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                           </td>
 
                           {/* Tax */}
-                          {showTax && (
+                          {!isV3Layout && showTax && (
                             <td style={{ padding: '12px 14px', fontSize: '13px', color: '#667085', fontFamily: F }}>
                               {fmtRs(taxAmt)}
                             </td>
@@ -1216,122 +1384,159 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                           </td>
 
                           {/* Actions */}
-                          <td style={{ padding: '12px 14px' }}>
+                          <td
+                            style={{
+                              padding: '12px 14px',
+                              overflow: isRowDeletePending(item.id) ? 'visible' : undefined,
+                              ...(isV3Layout
+                                ? {
+                                    position: 'sticky',
+                                    right: 0,
+                                    background:
+                                      errorCount > 0
+                                        ? '#FFFBFA'
+                                        : isDraftRow
+                                          ? '#FAFBFC'
+                                          : isRowSelected || isExpanded || hoveredRow === item.id
+                                            ? '#FAFBFC'
+                                            : '#FFFFFF',
+                                    zIndex: isRowDeletePending(item.id) ? 4 : 1,
+                                  }
+                                : {}),
+                            }}
+                          >
                             <div
                               style={{
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'flex-end',
-                                gap: '6px',
-                                opacity: hoveredRow === item.id || isExpanded ? 1 : 0.6,
+                                gap: '4px',
+                                opacity: isV3Layout || hoveredRow === item.id || isExpanded ? 1 : 0.6,
                                 transition: 'opacity 0.12s',
                               }}
                             >
-                              <button
-                                type="button"
-                                onClick={() => setFormModal({ mode: 'edit', itemId: item.id })}
-                                disabled={disabled}
-                                title="Edit"
-                                style={iconButtonStyle}
-                              >
-                                <Edit3 size={14} color="#667085" strokeWidth={2} />
-                              </button>
+                              {isV3Layout ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRowEdit(item)}
+                                    disabled={disabled}
+                                    title="Edit all fields"
+                                    style={iconButtonStyle}
+                                  >
+                                    <Edit3 size={14} color="#667085" strokeWidth={2} />
+                                  </button>
+                                  {renderRowDeleteAction(item, items.findIndex((i) => i.id === item.id))}
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setFormModal({ mode: 'edit', itemId: item.id })}
+                                    disabled={disabled}
+                                    title="Edit"
+                                    style={iconButtonStyle}
+                                  >
+                                    <Edit3 size={14} color="#667085" strokeWidth={2} />
+                                  </button>
 
-                              <div
-                                ref={openActionMenuId === item.id ? actionMenuRef : undefined}
-                                style={{ position: 'relative' }}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setOpenActionMenuId((prev) => (prev === item.id ? null : item.id))
-                                  }
-                                  title="More actions"
-                                  aria-expanded={openActionMenuId === item.id}
-                                  aria-haspopup="menu"
-                                  style={iconButtonStyle}
-                                >
-                                  <MoreHorizontal size={14} color="#667085" strokeWidth={2} />
-                                </button>
-                                <AnimatePresence>
-                                  {openActionMenuId === item.id && (
-                                    <motion.div
-                                      initial={{ opacity: 0, y: -4 }}
-                                      animate={{ opacity: 1, y: 0 }}
-                                      exit={{ opacity: 0, y: -4 }}
-                                      transition={{ duration: 0.12 }}
-                                      role="menu"
-                                      style={{
-                                        position: 'absolute',
-                                        top: 'calc(100% + 4px)',
-                                        right: 0,
-                                        zIndex: 30,
-                                        background: '#FFFFFF',
-                                        border: '1px solid #E4E7EC',
-                                        borderRadius: '8px',
-                                        boxShadow: '0 4px 12px rgba(16,24,40,0.1)',
-                                        padding: '4px',
-                                        minWidth: '168px',
-                                      }}
+                                  <div
+                                    ref={openActionMenuId === item.id ? actionMenuRef : undefined}
+                                    style={{ position: 'relative' }}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setOpenActionMenuId((prev) => (prev === item.id ? null : item.id))
+                                      }
+                                      title="More actions"
+                                      aria-expanded={openActionMenuId === item.id}
+                                      aria-haspopup="menu"
+                                      style={iconButtonStyle}
                                     >
-                                      <button
-                                        type="button"
-                                        role="menuitem"
-                                        onClick={() => {
-                                          duplicateItem(item);
-                                          setOpenActionMenuId(null);
-                                        }}
-                                        disabled={disabled}
-                                        style={rowActionMenuItemStyle}
-                                      >
-                                        <Copy size={13} strokeWidth={2} aria-hidden />
-                                        Duplicate
-                                      </button>
-                                      {onOpenGL && (
-                                        <button
-                                          type="button"
-                                          role="menuitem"
-                                          onClick={() => {
-                                            onOpenGL(item.id);
-                                            setOpenActionMenuId(null);
+                                      <MoreHorizontal size={14} color="#667085" strokeWidth={2} />
+                                    </button>
+                                    <AnimatePresence>
+                                      {openActionMenuId === item.id && (
+                                        <motion.div
+                                          initial={{ opacity: 0, y: -4 }}
+                                          animate={{ opacity: 1, y: 0 }}
+                                          exit={{ opacity: 0, y: -4 }}
+                                          transition={{ duration: 0.12 }}
+                                          role="menu"
+                                          style={{
+                                            position: 'absolute',
+                                            top: 'calc(100% + 4px)',
+                                            right: 0,
+                                            zIndex: 30,
+                                            background: '#FFFFFF',
+                                            border: '1px solid #E4E7EC',
+                                            borderRadius: '8px',
+                                            boxShadow: '0 4px 12px rgba(16,24,40,0.1)',
+                                            padding: '4px',
+                                            minWidth: '168px',
                                           }}
-                                          style={rowActionMenuItemStyle}
                                         >
-                                          GL distribution ({item.glAccountsCount || 1})
-                                        </button>
+                                          <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => {
+                                              duplicateItem(item);
+                                              setOpenActionMenuId(null);
+                                            }}
+                                            disabled={disabled}
+                                            style={rowActionMenuItemStyle}
+                                          >
+                                            <Copy size={13} strokeWidth={2} aria-hidden />
+                                            Duplicate
+                                          </button>
+                                          {onOpenGL && (
+                                            <button
+                                              type="button"
+                                              role="menuitem"
+                                              onClick={() => {
+                                                onOpenGL(item.id);
+                                                setOpenActionMenuId(null);
+                                              }}
+                                              style={rowActionMenuItemStyle}
+                                            >
+                                              GL distribution ({item.glAccountsCount || 1})
+                                            </button>
+                                          )}
+                                          {onOpenBudget && (
+                                            <button
+                                              type="button"
+                                              role="menuitem"
+                                              onClick={() => {
+                                                onOpenBudget(item.id);
+                                                setOpenActionMenuId(null);
+                                              }}
+                                              style={rowActionMenuItemStyle}
+                                            >
+                                              <DollarSign size={13} color="#EF4444" strokeWidth={2} aria-hidden />
+                                              Check budget
+                                            </button>
+                                          )}
+                                          {onOpenBudgetReport && (
+                                            <button
+                                              type="button"
+                                              role="menuitem"
+                                              onClick={() => {
+                                                onOpenBudgetReport(item.id);
+                                                setOpenActionMenuId(null);
+                                              }}
+                                              style={rowActionMenuItemStyle}
+                                            >
+                                              <ExternalLink size={13} strokeWidth={2} aria-hidden />
+                                              Budget report
+                                            </button>
+                                          )}
+                                        </motion.div>
                                       )}
-                                      {onOpenBudget && (
-                                        <button
-                                          type="button"
-                                          role="menuitem"
-                                          onClick={() => {
-                                            onOpenBudget(item.id);
-                                            setOpenActionMenuId(null);
-                                          }}
-                                          style={rowActionMenuItemStyle}
-                                        >
-                                          <DollarSign size={13} color="#EF4444" strokeWidth={2} aria-hidden />
-                                          Check budget
-                                        </button>
-                                      )}
-                                      {onOpenBudgetReport && (
-                                        <button
-                                          type="button"
-                                          role="menuitem"
-                                          onClick={() => {
-                                            onOpenBudgetReport(item.id);
-                                            setOpenActionMenuId(null);
-                                          }}
-                                          style={rowActionMenuItemStyle}
-                                        >
-                                          <ExternalLink size={13} strokeWidth={2} aria-hidden />
-                                          Budget report
-                                        </button>
-                                      )}
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
-                              </div>
+                                    </AnimatePresence>
+                                  </div>
+                                </>
+                              )}
                             </div>
                           </td>
                         </motion.tr>
@@ -1348,7 +1553,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                             >
                               <td
                                 colSpan={desktopColCount}
-                                style={{ padding: '0 14px 12px', borderBottom: '1px solid #E4E7EC', background: '#FFFFFF' }}
+                                style={{ padding: '8px 14px 12px', borderBottom: '1px solid #E4E7EC', background: '#FFFFFF' }}
                               >
                                 <div style={{ ...expandedDetailShellStyle, marginLeft: '44px' }}>
                                   <div style={expandedDetailBodyStyle}>
@@ -1392,20 +1597,45 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                                   <div style={expandedDetailFooterStyle}>
                                     <button
                                       type="button"
-                                      onClick={() => setFormModal({ mode: 'edit', itemId: item.id })}
-                                      style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
-                                    >
-                                      <Edit3 size={12} strokeWidth={2} aria-hidden />
-                                      Edit all fields
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => { duplicateItem(item); toggleExpand(item.id); }}
+                                      onClick={() => {
+                                        duplicateItem(item);
+                                        if (!isV3Layout) toggleExpand(item.id);
+                                      }}
+                                      disabled={disabled}
                                       style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
                                     >
                                       <Copy size={12} strokeWidth={2} aria-hidden />
                                       Duplicate
                                     </button>
+                                    {onOpenGL && (
+                                      <button
+                                        type="button"
+                                        onClick={() => onOpenGL(item.id)}
+                                        style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
+                                      >
+                                        GL distribution ({item.glAccountsCount || 1})
+                                      </button>
+                                    )}
+                                    {onOpenBudget && (
+                                      <button
+                                        type="button"
+                                        onClick={() => onOpenBudget(item.id)}
+                                        style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
+                                      >
+                                        <DollarSign size={12} color="#EF4444" strokeWidth={2} aria-hidden />
+                                        Check budget
+                                      </button>
+                                    )}
+                                    {onOpenBudgetReport && (
+                                      <button
+                                        type="button"
+                                        onClick={() => onOpenBudgetReport(item.id)}
+                                        style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
+                                      >
+                                        <ExternalLink size={12} strokeWidth={2} aria-hidden />
+                                        Budget report
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               </td>
@@ -1420,7 +1650,11 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                 {filteredItems.length === 0 && (
                   <tr>
                     <td colSpan={desktopColCount}>
-                      <EmptyState searchQuery={searchQuery} onAdd={() => setFormModal({ mode: 'add' })} />
+                      <EmptyState
+                        searchQuery={searchQuery}
+                        onAdd={() => setFormModal({ mode: 'add' })}
+                        hideAddButton={!showAddItemButton}
+                      />
                     </td>
                   </tr>
                 )}
@@ -1528,9 +1762,11 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
 function EmptyState({
   searchQuery,
   onAdd,
+  hideAddButton = false,
 }: {
   searchQuery: string;
   onAdd: () => void;
+  hideAddButton?: boolean;
 }) {
   return (
     <div
@@ -1562,12 +1798,12 @@ function EmptyState({
       <div style={{ fontSize: '14px', fontWeight: 600, color: '#344054', marginBottom: '6px' }}>
         {searchQuery ? 'No matching items' : 'No line items yet'}
       </div>
-      <div style={{ fontSize: '13px', marginBottom: '16px', maxWidth: '300px', margin: '0 auto 16px' }}>
+      <div style={{ fontSize: '13px', marginBottom: '16px', maxWidth: '320px', margin: '0 auto 16px' }}>
         {searchQuery
           ? 'Try a different search term or clear the search.'
           : 'Add your first item to get started.'}
       </div>
-      {!searchQuery && (
+      {!searchQuery && !hideAddButton && (
         <button type="button" onClick={onAdd} style={primaryButtonStyle}>
           <Plus size={14} strokeWidth={2.5} aria-hidden />
           Add item
