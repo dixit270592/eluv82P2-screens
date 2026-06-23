@@ -46,7 +46,6 @@ type PRLineItemsSectionV2Props = {
   options?: PurchaseRequestOptionsState;
   disabled?: boolean;
   defaultVendor?: string;
-  onSelectInventory?: () => void;
   onOpenGL?: (itemId: string) => void;
   onOpenBudget?: (itemId: string) => void;
   onOpenBudgetReport?: (itemId: string) => void;
@@ -119,7 +118,6 @@ export const PRLineItemsSectionV2 = forwardRef<PRLineItemsSectionHandle, PRLineI
       options = createDefaultPurchaseRequestOptions(),
       disabled = false,
       defaultVendor,
-      onSelectInventory,
       onOpenGL,
       onOpenBudget,
       onOpenBudgetReport,
@@ -556,17 +554,6 @@ export const PRLineItemsSectionV2 = forwardRef<PRLineItemsSectionHandle, PRLineI
           )}
 
           <div style={{ flex: 1 }} />
-
-          {onSelectInventory && (
-            <button
-              type="button"
-              onClick={onSelectInventory}
-              disabled={disabled}
-              style={{ ...secondaryButtonStyle, height: '34px' }}
-            >
-              Select from inventory
-            </button>
-          )}
 
           <button
             type="button"

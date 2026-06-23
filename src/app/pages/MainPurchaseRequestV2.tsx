@@ -783,7 +783,6 @@ export function MainPurchaseRequestV2() {
                   options={prOptions}
                   defaultVendor={prHeader.vendor}
                   disabled={status === 'submitted' || status === 'awaiting_approval'}
-                  onSelectInventory={() => setModalOpen(true)}
                   onOpenGL={(itemId) => setGLDistributionRow(itemId)}
                   onOpenBudget={(itemId) => setBudgetPopupRow(itemId)}
                   onOpenBudgetReport={(itemId) => setBudgetReportRow(itemId)}

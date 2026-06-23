@@ -12,7 +12,6 @@ type PRLineItemsWithLayoutPickerProps = {
   options?: PurchaseRequestOptionsState;
   disabled?: boolean;
   defaultVendor?: string;
-  onSelectInventory?: () => void;
   onOpenGL?: (itemId: string) => void;
   onOpenBudget?: (itemId: string) => void;
   onOpenBudgetReport?: (itemId: string) => void;
@@ -32,7 +31,6 @@ export const PRLineItemsWithLayoutPicker = forwardRef<
     options = createDefaultPurchaseRequestOptions(),
     disabled = false,
     defaultVendor,
-    onSelectInventory,
     onOpenGL,
     onOpenBudget,
     onOpenBudgetReport,
@@ -51,7 +49,6 @@ export const PRLineItemsWithLayoutPicker = forwardRef<
     options,
     disabled,
     defaultVendor,
-    onSelectInventory,
     onOpenGL,
     onOpenBudget,
     onOpenBudgetReport,
