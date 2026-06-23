@@ -1,5 +1,6 @@
 export { PRLineItemsSection, fmtRs } from './PRLineItemsSection';
 export { PRLineItemsSectionV2 } from './PRLineItemsSectionV2';
+export { PRLineItemsSectionV3 } from './PRLineItemsSectionV3';
 export { PRLineItemsWithLayoutPicker } from './PRLineItemsWithLayoutPicker';
 export { LineItemsLayoutToggle } from './LineItemsLayoutToggle';
 export { LineItemSelectionBar } from './LineItemSelectionBar';

@@ -34,6 +34,13 @@ import { P2P_BRAND } from '../../tokens/brand';
 import { UI_FONT_STACK as F } from '../../tokens/typography';
 import { getLineItemFieldDefinitions } from './lineItemFieldConfig';
 import { validateLineItemForm, type LineItemFormValues } from './lineItemValidation';
+import {
+  createBlankLineItem,
+  filledLineItems,
+  isBlankLineItem,
+  isLineItemComplete,
+  isTrailingBlankItem,
+} from './lineItemBlank';
 import { LineItemFormModal } from './LineItemFormModal';
 import type { PRLineItem } from './types';
 import { Checkbox } from '../ui/checkbox';
@@ -66,6 +73,8 @@ type PRLineItemsSectionProps = {
   onItemAdded?: (description: string) => void;
   onItemRemoved?: () => void;
   onRequestQuote?: (selectedItemIds: string[]) => void;
+  /** When true, appends a blank row after the last row is fully valid (V3). */
+  autoPopulateBlankRow?: boolean;
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -155,6 +164,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       onItemAdded,
       onItemRemoved,
       onRequestQuote,
+      autoPopulateBlankRow = false,
     },
     ref,
   ) {
@@ -184,8 +194,22 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       [options],
     );
     const getErrorCount = useCallback(
-      (item: PRLineItem) => Object.keys(getItemErrors(item)).length,
-      [getItemErrors],
+      (item: PRLineItem, index?: number) => {
+        if (
+          autoPopulateBlankRow &&
+          index !== undefined &&
+          isTrailingBlankItem(items, item, index)
+        ) {
+          return 0;
+        }
+        return Object.keys(getItemErrors(item)).length;
+      },
+      [autoPopulateBlankRow, getItemErrors, items],
+    );
+
+    const itemsForValidation = useMemo(
+      () => (autoPopulateBlankRow ? filledLineItems(items) : items),
+      [autoPopulateBlankRow, items],
     );
 
     const filteredItems = useMemo(() => {
@@ -236,14 +260,21 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       setSelectedIds(new Set());
     };
 
-    const subtotalAll = items.reduce((s, i) => s + i.subtotal, 0);
-    const taxTotal = showTax ? items.reduce((s, i) => s + i.subtotal * 0.1, 0) : 0; // demo 10 % rate
-    const totalItemErrors = items.reduce((n, i) => n + (getErrorCount(i) > 0 ? 1 : 0), 0);
+    const subtotalAll = itemsForValidation.reduce((s, i) => s + i.subtotal, 0);
+    const taxTotal = showTax ? itemsForValidation.reduce((s, i) => s + i.subtotal * 0.1, 0) : 0; // demo 10 % rate
+    const totalItemErrors = itemsForValidation.reduce((n, i) => {
+      const itemIndex = items.findIndex((item) => item.id === i.id);
+      return n + (getErrorCount(i, itemIndex) > 0 ? 1 : 0);
+    }, 0);
+    const filledItemCount = itemsForValidation.length;
 
     // ── Expose imperative handle ──────────────────────────────────────────────
     useImperativeHandle(ref, () => ({
       focusFirstError() {
-        const first = items.find((i) => getErrorCount(i) > 0);
+        const first = itemsForValidation.find((i) => {
+          const itemIndex = items.findIndex((item) => item.id === i.id);
+          return getErrorCount(i, itemIndex) > 0;
+        });
         if (!first) return false;
         setExpandedIds((prev) => new Set([...prev, first.id]));
         requestAnimationFrame(() => {
@@ -276,6 +307,26 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       document.addEventListener('mousedown', handler);
       return () => document.removeEventListener('mousedown', handler);
     }, [showViewMenu, openActionMenuId]);
+
+    // ── V3: auto-append blank row when last filled row is complete ───────────
+    useEffect(() => {
+      if (!autoPopulateBlankRow || disabled) return;
+
+      if (items.length === 0) {
+        const blank = createBlankLineItem(`blank-${Date.now()}`, defaultVendor, options);
+        onChange([blank]);
+        setExpandedIds((prev) => new Set([...prev, blank.id]));
+        return;
+      }
+
+      const last = items[items.length - 1];
+      if (isBlankLineItem(last)) return;
+      if (!isLineItemComplete(last, options)) return;
+
+      const blank = createBlankLineItem(`blank-${Date.now()}`, defaultVendor, options);
+      onChange([...items, blank]);
+      setExpandedIds((prev) => new Set([...prev, blank.id]));
+    }, [autoPopulateBlankRow, disabled, defaultVendor, items, onChange, options]);
 
     // ── Focus mode: lock body scroll while full-screen ────────────────────────
     useEffect(() => {
@@ -310,7 +361,14 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       } else {
         const newItem = fromFormValues(Date.now().toString(), data);
         if (!newItem.vendor && defaultVendor) newItem.vendor = defaultVendor;
-        onChange([...items, newItem]);
+        let next = [...items];
+        const last = next[next.length - 1];
+        if (autoPopulateBlankRow && last && isBlankLineItem(last)) {
+          next[next.length - 1] = newItem;
+        } else {
+          next = [...next, newItem];
+        }
+        onChange(next);
         onItemAdded?.(data.description);
         setExpandedIds((prev) => new Set([...prev, newItem.id]));
       }
@@ -365,12 +423,16 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       display,
       type = 'text',
       bold,
+      muted,
+      editValue,
     }: {
       id: string;
       field: InlineEdit['field'];
       display: string;
       type?: 'text' | 'number';
       bold?: boolean;
+      muted?: boolean;
+      editValue?: string | number;
     }) => {
       const active = isInline(id, field);
       if (active) {
@@ -403,8 +465,9 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       }
       const cellIdleStyle: React.CSSProperties = {
         fontSize: '13px',
-        fontWeight: bold ? 700 : 400,
-        color: bold ? '#101828' : '#344054',
+        fontWeight: bold && !muted ? 700 : 400,
+        color: muted ? '#98A2B3' : bold ? '#101828' : '#344054',
+        fontStyle: muted ? 'italic' : undefined,
         fontFamily: F,
         cursor: disabled ? 'default' : 'text',
         padding: '4px 8px',
@@ -433,7 +496,10 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
           role="button"
           tabIndex={disabled ? -1 : 0}
           title={disabled ? undefined : 'Click to edit'}
-          onClick={() => !disabled && startInline(id, field, display.replace('Rs. ', ''))}
+          onClick={() =>
+            !disabled &&
+            startInline(id, field, editValue ?? display.replace('Rs. ', ''))
+          }
           onKeyDown={(e) => {
             if ((e.key === 'Enter' || e.key === ' ') && !disabled)
               startInline(id, field, display.replace('Rs. ', ''));
@@ -458,7 +524,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
     // ── Mobile card layout ────────────────────────────────────────────────────
     const MobileCard = ({ item, index }: { item: PRLineItem; index: number }) => {
       const isExpanded = expandedIds.has(item.id);
-      const errorCount = getErrorCount(item);
+      const errorCount = getErrorCount(item, index);
       const itemErrors = getItemErrors(item);
 
       return (
@@ -530,7 +596,19 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                   </span>
                 )}
               </div>
-              <InlineCell id={item.id} field="description" display={item.item || 'Untitled item'} bold />
+              <InlineCell
+                id={item.id}
+                field="description"
+                display={
+                  item.item ||
+                  (autoPopulateBlankRow && isBlankLineItem(item)
+                    ? 'Add description…'
+                    : 'Untitled item')
+                }
+                editValue={item.item}
+                muted={autoPopulateBlankRow && isBlankLineItem(item)}
+                bold
+              />
               <div style={{ fontSize: '11px', color: '#98A2B3', fontFamily: F, marginTop: '3px' }}>
                 {item.type || 'Goods'}
                 {item.unitOfMeasure ? ` · ${item.unitOfMeasure}` : ''}
@@ -688,7 +766,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
               Line Items — Focus Mode
             </span>
             <span style={{ fontSize: '12px', color: '#667085', fontFamily: F }}>
-              {items.length} item{items.length !== 1 ? 's' : ''} · {fmtRs(subtotalAll + taxTotal)} total
+              {filledItemCount} item{filledItemCount !== 1 ? 's' : ''} · {fmtRs(subtotalAll + taxTotal)} total
             </span>
             <div style={{ flex: 1 }} />
             <button
@@ -864,8 +942,12 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
             {filteredItems.length === 0 ? (
               <EmptyState searchQuery={searchQuery} onAdd={() => setFormModal({ mode: 'add' })} />
             ) : (
-              filteredItems.map((item, index) => (
-                <MobileCard key={item.id} item={item} index={index} />
+              filteredItems.map((item) => (
+                <MobileCard
+                  key={item.id}
+                  item={item}
+                  index={items.findIndex((i) => i.id === item.id)}
+                />
               ))
             )}
           </div>
@@ -911,12 +993,14 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
               <tbody>
                 <AnimatePresence initial={false}>
                   {filteredItems.map((item, index) => {
+                    const itemIndex = items.findIndex((i) => i.id === item.id);
                     const isExpanded = expandedIds.has(item.id);
-                    const errorCount = getErrorCount(item);
+                    const errorCount = getErrorCount(item, itemIndex);
                     const itemErrors = getItemErrors(item);
                     const taxAmt = showTax ? item.subtotal * 0.1 : 0;
                     const gl = parseGlAccount(item.glAccount);
                     const requiredByLabel = formatRequiredBy(item.requiredBy);
+                    const isDraftRow = autoPopulateBlankRow && isTrailingBlankItem(items, item, itemIndex);
                     const isRowSelected = selectedIds.has(item.id);
 
                     return (
@@ -933,13 +1017,17 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                             background:
                               errorCount > 0
                                 ? '#FFFBFA'
-                                : isRowSelected
+                                : isDraftRow
                                   ? '#FAFBFC'
-                                  : isExpanded
+                                  : isRowSelected
                                     ? '#FAFBFC'
-                                    : hoveredRow === item.id
+                                    : isExpanded
                                       ? '#FAFBFC'
-                                      : '#FFFFFF',
+                                      : hoveredRow === item.id
+                                        ? '#FAFBFC'
+                                        : '#FFFFFF',
+                            outline: isDraftRow ? '1px dashed #D0D5DD' : undefined,
+                            outlineOffset: isDraftRow ? '-1px' : undefined,
                             boxShadow:
                               hoveredRow === item.id || isExpanded
                                 ? `inset 2px 0 0 ${P2P_BRAND.primary}`
@@ -1000,7 +1088,14 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                                   <InlineCell
                                     id={item.id}
                                     field="description"
-                                    display={item.item || 'Untitled item'}
+                                    display={
+                                      item.item ||
+                                      (autoPopulateBlankRow && isBlankLineItem(item)
+                                        ? 'Add description…'
+                                        : 'Untitled item')
+                                    }
+                                    editValue={item.item}
+                                    muted={autoPopulateBlankRow && isBlankLineItem(item)}
                                     bold
                                   />
                                   {!isExpanded && (
@@ -1335,7 +1430,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
         )}
 
         {/* Footer totals */}
-        {items.length > 0 && (
+        {filledItemCount > 0 && (
           <div
             style={{
               display: 'flex',
@@ -1350,7 +1445,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <span style={{ fontSize: '13px', fontWeight: 600, color: '#344054', fontFamily: F }}>
-                {items.length} item{items.length !== 1 ? 's' : ''}
+                {filledItemCount} item{filledItemCount !== 1 ? 's' : ''}
               </span>
               {totalItemErrors > 0 && (
                 <span
@@ -1371,7 +1466,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                   {totalItemErrors} item{totalItemErrors !== 1 ? 's have' : ' has'} errors
                 </span>
               )}
-              {totalItemErrors === 0 && items.length > 0 && (
+              {totalItemErrors === 0 && filledItemCount > 0 && (
                 <span
                   style={{
                     display: 'inline-flex',

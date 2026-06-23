@@ -1,7 +1,13 @@
 import { P2P_BRAND } from '../../tokens/brand';
 import { UI_FONT_STACK as F } from '../../tokens/typography';
 
-export type LineItemsLayoutVersion = 'v1' | 'v2';
+export type LineItemsLayoutVersion = 'v1' | 'v2' | 'v3';
+
+const VERSION_LABELS: Record<LineItemsLayoutVersion, string> = {
+  v1: 'V1 · Expandable rows',
+  v2: 'V2 · Compact + drawer',
+  v3: 'V3 · Auto-populate entity',
+};
 
 type LineItemsLayoutToggleProps = {
   value: LineItemsLayoutVersion;
@@ -21,9 +27,11 @@ export function LineItemsLayoutToggle({ value, onChange, compact }: LineItemsLay
         borderRadius: '7px',
         border: '1px solid #E4E7EC',
         flexShrink: 0,
+        flexWrap: 'wrap',
+        gap: '2px',
       }}
     >
-      {(['v1', 'v2'] as const).map((version) => {
+      {(['v1', 'v2', 'v3'] as const).map((version) => {
         const active = value === version;
         return (
           <button
@@ -33,10 +41,10 @@ export function LineItemsLayoutToggle({ value, onChange, compact }: LineItemsLay
             aria-pressed={active}
             style={{
               height: compact ? '26px' : '28px',
-              padding: compact ? '0 10px' : '0 12px',
+              padding: compact ? '0 8px' : '0 10px',
               border: 'none',
               borderRadius: '5px',
-              fontSize: '12px',
+              fontSize: '11px',
               fontWeight: 600,
               fontFamily: F,
               cursor: 'pointer',
@@ -47,7 +55,7 @@ export function LineItemsLayoutToggle({ value, onChange, compact }: LineItemsLay
               whiteSpace: 'nowrap',
             }}
           >
-            {version === 'v1' ? 'V1 · Expandable rows' : 'V2 · Compact + drawer'}
+            {VERSION_LABELS[version]}
           </button>
         );
       })}

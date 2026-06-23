@@ -4,6 +4,7 @@ import { UI_FONT_STACK as F } from '../../tokens/typography';
 import { LineItemsLayoutToggle, type LineItemsLayoutVersion } from './LineItemsLayoutToggle';
 import { PRLineItemsSection, type PRLineItemsSectionHandle } from './PRLineItemsSection';
 import { PRLineItemsSectionV2 } from './PRLineItemsSectionV2';
+import { PRLineItemsSectionV3 } from './PRLineItemsSectionV3';
 import type { PRLineItem } from './types';
 
 type PRLineItemsWithLayoutPickerProps = {
@@ -74,14 +75,18 @@ export const PRLineItemsWithLayoutPicker = forwardRef<
         <span style={{ fontSize: '12px', color: '#98A2B3', fontFamily: F }}>
           {layout === 'v1'
             ? 'Expand rows inline for full field visibility'
-            : 'Scan compact rows · open a drawer for details'}
+            : layout === 'v2'
+              ? 'Scan compact rows · open a drawer for details'
+              : 'Complete the last row · a blank row appears automatically'}
         </span>
       </div>
 
       {layout === 'v1' ? (
         <PRLineItemsSection ref={ref} {...sharedProps} />
-      ) : (
+      ) : layout === 'v2' ? (
         <PRLineItemsSectionV2 ref={ref} {...sharedProps} />
+      ) : (
+        <PRLineItemsSectionV3 ref={ref} {...sharedProps} />
       )}
     </div>
   );
