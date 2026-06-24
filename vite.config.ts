@@ -22,6 +22,15 @@ const base = process.env.VITE_BASE_PATH?.replace(/\/?$/, '/') || '/'
 
 export default defineConfig({
   base,
+  // Listen on IPv4 + IPv6 so Chrome (127.0.0.1) and other tools (localhost → ::1) both work.
+  server: {
+    host: true,
+    port: 5173,
+  },
+  preview: {
+    host: true,
+    port: 5173,
+  },
   plugins: [
     figmaAssetResolver(),
     // The React and Tailwind plugins are both required for Make, even if
