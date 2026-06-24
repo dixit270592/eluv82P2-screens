@@ -26,6 +26,12 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    strictPort: true,
+    // Prevent browser / Cursor Simple Browser from serving stale bundles in dev.
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      Pragma: 'no-cache',
+    },
   },
   preview: {
     host: true,

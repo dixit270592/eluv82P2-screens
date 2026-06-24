@@ -9,7 +9,7 @@ import {
 import { Sidebar } from '../components/Sidebar';
 import { TopHeader } from '../components/TopHeader';
 import { PurchaseRequestModal, LineItemData, PRHeaderData } from '../components/PurchaseRequestModal';
-import { PRLineItemsWithLayoutPicker, type PRLineItem, type PRLineItemsSectionHandle } from '../components/pr-line-items';
+import { PRLineItemsWithLayoutPicker, type PRLineItem, type PRLineItemsSectionHandle, formatLineItemCurrency } from '../components/pr-line-items';
 import { loadPurchaseRequestOptions } from '../data/purchaseRequestOptions';
 import { SendForApprovalModal } from '../components/SendForApprovalModal';
 import { GLDistributionModal } from '../components/GLDistributionModal';
@@ -21,7 +21,8 @@ import { UI_FONT_STACK as F } from '../tokens/typography';
 import { P2P_BRAND } from '../tokens/brand';
 import { printTransaction } from '../utils/printTransaction';
 import { isStarred as checkStarred, toggleStarred } from '../utils/starredTransactions';
-const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const fmt = formatLineItemCurrency;
 
 const DEFAULT_HEADER: PRHeaderData = {
   description: 'Standard Purchase Request',

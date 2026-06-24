@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent,
 } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -18,12 +19,12 @@ import {
   DollarSign,
   ExternalLink,
   AlertCircle,
-  Copy,
   X,
-  CheckCircle2,
   Maximize2,
   Minimize2,
   MoreHorizontal,
+  Loader2,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   createDefaultPurchaseRequestOptions,
@@ -31,13 +32,26 @@ import {
 } from '../../data/purchaseRequestOptions';
 import { P2P_BRAND } from '../../tokens/brand';
 import { UI_FONT_STACK as F } from '../../tokens/typography';
-import { getLineItemFieldDefinitions } from './lineItemFieldConfig';
-import { validateLineItemForm, type LineItemFormValues } from './lineItemValidation';
+import { getLineItemFieldDefinitions, type LineItemFieldKey } from './lineItemFieldConfig';
+import {
+  validateLineItemForm,
+  hasLineItemErrors,
+  type LineItemFormValues,
+  type LineItemValidationErrors,
+} from './lineItemValidation';
+import { LineItemInlineForm } from './LineItemInlineForm';
+import { SelectItemModal } from './SelectItemModal';
+import { UnsavedChangesDialog } from './UnsavedChangesDialog';
+import { isDraftDirty, hasAnyUnsavedDrafts } from './lineItemDraftUtils';
+import {
+  catalogItemToLineItemFields,
+  catalogPopulatedFieldKeys,
+  type InventoryCatalogItem,
+} from '../../data/inventoryCatalog';
 import {
   createBlankLineItem,
   filledLineItems,
   isBlankLineItem,
-  isLineItemComplete,
   isTrailingBlankItem,
 } from './lineItemBlank';
 import { LineItemFormModal } from './LineItemFormModal';
@@ -45,9 +59,10 @@ import type { PRLineItem } from './types';
 import { Checkbox } from '../ui/checkbox';
 import { LINE_ITEM_CHECKBOX_CLASS } from './lineItemSelectionStyles';
 import { LineItemSelectionBar } from './LineItemSelectionBar';
+import { formatLineItemCurrency, LINE_ITEM_CURRENCY_PREFIX } from './lineItemCurrency';
+
 // ─── Currency ───────────────────────────────────────────────────────────────
-export const fmtRs = (n: number) =>
-  `Rs. ${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export const fmtRs = formatLineItemCurrency;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export type PRLineItemsSectionHandle = {
@@ -182,9 +197,31 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       ids: string[];
       source: 'row' | 'bulk';
     } | null>(null);
+    const [editingIds, setEditingIds] = useState<Set<string>>(new Set());
+    const [unsavedNewIds, setUnsavedNewIds] = useState<Set<string>>(new Set());
+    const [draftValues, setDraftValues] = useState<Record<string, LineItemFormValues>>({});
+    const [draftTouched, setDraftTouched] = useState<
+      Record<string, Partial<Record<LineItemFieldKey, boolean>>>
+    >({});
+    const [draftErrors, setDraftErrors] = useState<Record<string, LineItemValidationErrors>>({});
+    const [saveAttemptedIds, setSaveAttemptedIds] = useState<Set<string>>(new Set());
+    const [itemSelectTargetId, setItemSelectTargetId] = useState<string | null>(null);
+    const itemSelectOpenedAtRef = useRef(0);
+    const [autoPopulatedFields, setAutoPopulatedFields] = useState<
+      Record<string, Set<LineItemFieldKey>>
+    >({});
+    const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+    const [saveErrorIds, setSaveErrorIds] = useState<Set<string>>(new Set());
+    const [unsavedPrompt, setUnsavedPrompt] = useState<{ itemId: string; action: () => void } | null>(
+      null,
+    );
+    const [savedFlashIds, setSavedFlashIds] = useState<Set<string>>(new Set());
+    const [saveAnnouncement, setSaveAnnouncement] = useState('');
     const viewMenuRef = useRef<HTMLDivElement>(null);
     const actionMenuRef = useRef<HTMLDivElement>(null);
     const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
+    const focusBlankRowRef = useRef(false);
+    const saveAnnouncementTimerRef = useRef<number | null>(null);
     const windowWidth = useWindowWidth();
     const isMobile = windowWidth < 768;
 
@@ -197,6 +234,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
     );
     const getErrorCount = useCallback(
       (item: PRLineItem, index?: number) => {
+        if (editingIds.has(item.id)) return 0;
         if (
           autoPopulateBlankRow &&
           index !== undefined &&
@@ -206,7 +244,240 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
         }
         return Object.keys(getItemErrors(item)).length;
       },
-      [autoPopulateBlankRow, getItemErrors, items],
+      [autoPopulateBlankRow, editingIds, getItemErrors, items],
+    );
+
+    const isItemEditing = useCallback((id: string) => editingIds.has(id), [editingIds]);
+    const isUnsavedNewItem = useCallback((id: string) => unsavedNewIds.has(id), [unsavedNewIds]);
+
+    const enterEditMode = useCallback((itemId: string, item: PRLineItem, isNew: boolean) => {
+      setEditingIds((prev) => new Set([...prev, itemId]));
+      if (isNew) setUnsavedNewIds((prev) => new Set([...prev, itemId]));
+      setDraftValues((prev) => ({ ...prev, [itemId]: toFormValues(item) }));
+      setDraftTouched((prev) => ({ ...prev, [itemId]: {} }));
+      setDraftErrors((prev) => ({ ...prev, [itemId]: {} }));
+      setSaveAttemptedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+      setExpandedIds((prev) => new Set([...prev, itemId]));
+    }, []);
+
+    const exitEditMode = useCallback((itemId: string) => {
+      setEditingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+      setUnsavedNewIds((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+      setDraftValues((prev) => {
+        const { [itemId]: _, ...rest } = prev;
+        return rest;
+      });
+      setDraftTouched((prev) => {
+        const { [itemId]: _, ...rest } = prev;
+        return rest;
+      });
+      setDraftErrors((prev) => {
+        const { [itemId]: _, ...rest } = prev;
+        return rest;
+      });
+      setSaveAttemptedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+      setAutoPopulatedFields((prev) => {
+        const { [itemId]: _, ...rest } = prev;
+        return rest;
+      });
+    }, []);
+
+    const updateDraft = useCallback(
+      (itemId: string, values: LineItemFormValues, skipHighlightClear?: boolean) => {
+        setDraftValues((prev) => ({ ...prev, [itemId]: values }));
+        setDraftErrors((prev) => ({
+          ...prev,
+          [itemId]: validateLineItemForm(values, options),
+        }));
+        if (!skipHighlightClear) {
+          setAutoPopulatedFields((prev) => {
+            if (!prev[itemId]) return prev;
+            const next = { ...prev };
+            delete next[itemId];
+            return next;
+          });
+        }
+      },
+      [options],
+    );
+
+    const clearFieldHighlight = useCallback((itemId: string, key: LineItemFieldKey) => {
+      setAutoPopulatedFields((prev) => {
+        const current = prev[itemId];
+        if (!current?.has(key)) return prev;
+        const nextSet = new Set(current);
+        nextSet.delete(key);
+        const next = { ...prev };
+        if (nextSet.size === 0) delete next[itemId];
+        else next[itemId] = nextSet;
+        return next;
+      });
+    }, []);
+
+    const findNextRequiredField = useCallback(
+      (values: LineItemFormValues): LineItemFieldKey | null => {
+        const errors = validateLineItemForm(values, options);
+        const fields = getLineItemFieldDefinitions(options).filter((f) => f.visible);
+        return fields.find((f) => errors[f.key])?.key ?? null;
+      },
+      [options],
+    );
+
+    const focusFormField = useCallback((itemId: string, fieldKey: LineItemFieldKey) => {
+      requestAnimationFrame(() => {
+        const el = rowRefs.current
+          .get(itemId)
+          ?.querySelector<HTMLElement>(`[data-field="${fieldKey}"]`);
+        el?.focus();
+        el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+    }, []);
+
+    const announceSaveSuccess = useCallback((message: string) => {
+      setSaveAnnouncement(message);
+      if (saveAnnouncementTimerRef.current) {
+        window.clearTimeout(saveAnnouncementTimerRef.current);
+      }
+      saveAnnouncementTimerRef.current = window.setTimeout(() => {
+        setSaveAnnouncement('');
+        saveAnnouncementTimerRef.current = null;
+      }, 4500);
+    }, []);
+
+    const dismissSaveAnnouncement = useCallback(() => {
+      setSaveAnnouncement('');
+      if (saveAnnouncementTimerRef.current) {
+        window.clearTimeout(saveAnnouncementTimerRef.current);
+        saveAnnouncementTimerRef.current = null;
+      }
+    }, []);
+
+    const flashSavedRow = useCallback((itemId: string) => {
+      setSavedFlashIds((prev) => new Set([...prev, itemId]));
+      window.setTimeout(() => {
+        setSavedFlashIds((prev) => {
+          const next = new Set(prev);
+          next.delete(itemId);
+          return next;
+        });
+      }, 2400);
+    }, []);
+
+    const focusTrailingBlankRow = useCallback(() => {
+      if (!autoPopulateBlankRow) return;
+      focusBlankRowRef.current = true;
+    }, [autoPopulateBlankRow]);
+
+    const openItemSelect = useCallback(
+      (lineItemId: string) => {
+        if (disabled) return;
+        const item = items.find((i) => i.id === lineItemId);
+        if (!item) return;
+
+        setExpandedIds((prev) => new Set([...prev, lineItemId]));
+        if (!editingIds.has(lineItemId)) {
+          enterEditMode(
+            lineItemId,
+            item,
+            isBlankLineItem(item) || unsavedNewIds.has(lineItemId),
+          );
+        }
+
+        // Open immediately — InventorySearchButton uses pointerdown before blur/click races
+        itemSelectOpenedAtRef.current = Date.now();
+        setItemSelectTargetId(lineItemId);
+      },
+      [disabled, editingIds, enterEditMode, items, unsavedNewIds],
+    );
+
+    const applyInventorySelection = useCallback(
+      (catalogItem: InventoryCatalogItem) => {
+        if (!itemSelectTargetId || disabled) return;
+        const lineItemId = itemSelectTargetId;
+        const populated = catalogItemToLineItemFields(catalogItem);
+        const highlightKeys = new Set<LineItemFieldKey>(
+          catalogPopulatedFieldKeys(catalogItem) as LineItemFieldKey[],
+        );
+
+        const mergeValues = (base: LineItemFormValues): LineItemFormValues => ({
+          ...base,
+          ...populated,
+          quantity: base.quantity > 0 ? base.quantity : 1,
+        });
+
+        const item = items.find((i) => i.id === lineItemId);
+        if (!item) return;
+
+        const baseValues = draftValues[lineItemId] ?? toFormValues(item);
+        const nextValues = mergeValues(baseValues);
+
+        if (!editingIds.has(lineItemId)) {
+          setEditingIds((prev) => new Set([...prev, lineItemId]));
+          setDraftTouched((prev) => ({ ...prev, [lineItemId]: {} }));
+          setSaveAttemptedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(lineItemId);
+            return next;
+          });
+        }
+
+        setDraftValues((prev) => ({ ...prev, [lineItemId]: nextValues }));
+        setDraftErrors((prev) => ({
+          ...prev,
+          [lineItemId]: validateLineItemForm(nextValues, options),
+        }));
+        setAutoPopulatedFields((prev) => ({ ...prev, [lineItemId]: highlightKeys }));
+        setExpandedIds((prev) => new Set([...prev, lineItemId]));
+        setItemSelectTargetId(null);
+
+        const nextRequired = findNextRequiredField(nextValues);
+        if (nextRequired) {
+          focusFormField(lineItemId, nextRequired);
+        }
+      },
+      [
+        disabled,
+        draftValues,
+        editingIds,
+        findNextRequiredField,
+        focusFormField,
+        itemSelectTargetId,
+        items,
+        options,
+      ],
+    );
+
+    const blurDraftField = useCallback(
+      (itemId: string, key: LineItemFieldKey) => {
+        setDraftTouched((prev) => ({
+          ...prev,
+          [itemId]: { ...(prev[itemId] || {}), [key]: true },
+        }));
+        const draft = draftValues[itemId];
+        if (draft) {
+          setDraftErrors((prev) => ({
+            ...prev,
+            [itemId]: validateLineItemForm(draft, options),
+          }));
+        }
+      },
+      [draftValues, options],
     );
 
     const itemsForValidation = useMemo(
@@ -267,7 +538,14 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       return n + (getErrorCount(i, itemIndex) > 0 ? 1 : 0);
     }, 0);
     const filledItemCount = itemsForValidation.length;
-    const showAddItemButton = !autoPopulateBlankRow || filledItemCount === 0;
+    const hasTrailingBlankDraft =
+      autoPopulateBlankRow &&
+      items.length > 0 &&
+      isBlankLineItem(items[items.length - 1]);
+    /** V3: toolbar Add only for true empty state; continuous entry uses the trailing blank row. */
+    const showAddItemButton =
+      !disabled &&
+      (!autoPopulateBlankRow || (filledItemCount === 0 && !hasTrailingBlankDraft));
 
     const finalizeItemsAfterRemoval = useCallback(
       (next: PRLineItem[]) => {
@@ -277,6 +555,90 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       },
       [autoPopulateBlankRow],
     );
+
+    const guardUnsavedDraft = useCallback(
+      (itemId: string, action: () => void) => {
+        const draft = draftValues[itemId];
+        const item = items.find((i) => i.id === itemId);
+        if (!draft || !item || !editingIds.has(itemId)) {
+          action();
+          return;
+        }
+        if (!isDraftDirty(draft, item, unsavedNewIds.has(itemId))) {
+          exitEditMode(itemId);
+          action();
+          return;
+        }
+        setUnsavedPrompt({ itemId, action });
+      },
+      [draftValues, editingIds, exitEditMode, items, unsavedNewIds],
+    );
+
+    const confirmDiscardUnsaved = useCallback(() => {
+      if (!unsavedPrompt) return;
+      const { itemId, action } = unsavedPrompt;
+      if (unsavedNewIds.has(itemId)) {
+        onChange(finalizeItemsAfterRemoval(items.filter((i) => i.id !== itemId)));
+        setExpandedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(itemId);
+          return next;
+        });
+      }
+      exitEditMode(itemId);
+      setUnsavedPrompt(null);
+      action();
+    }, [exitEditMode, finalizeItemsAfterRemoval, items, onChange, unsavedNewIds, unsavedPrompt]);
+
+    const focusOrCreateBlank = useCallback(() => {
+      if (!autoPopulateBlankRow) {
+        setFormModal({ mode: 'add' });
+        return;
+      }
+      focusBlankRowRef.current = false;
+      const last = items[items.length - 1];
+      if (last && isBlankLineItem(last)) {
+        setExpandedIds((prev) => new Set([...prev, last.id]));
+        enterEditMode(last.id, last, unsavedNewIds.has(last.id) || !last.item.trim());
+        requestAnimationFrame(() => focusFormField(last.id, 'description'));
+        return;
+      }
+      const blank = createBlankLineItem(`blank-${Date.now()}`, defaultVendor, options);
+      onChange([...items, blank]);
+      enterEditMode(blank.id, blank, true);
+      requestAnimationFrame(() => focusFormField(blank.id, 'description'));
+    }, [
+      autoPopulateBlankRow,
+      defaultVendor,
+      enterEditMode,
+      focusFormField,
+      items,
+      onChange,
+      options,
+      unsavedNewIds,
+    ]);
+
+    const handleAddItem = useCallback(() => {
+      if (disabled) return;
+      const dirtyId = [...editingIds].find((id) => {
+        const draft = draftValues[id];
+        const item = items.find((i) => i.id === id);
+        return draft && item && isDraftDirty(draft, item, unsavedNewIds.has(id));
+      });
+      if (dirtyId) {
+        guardUnsavedDraft(dirtyId, focusOrCreateBlank);
+        return;
+      }
+      focusOrCreateBlank();
+    }, [
+      disabled,
+      draftValues,
+      editingIds,
+      focusOrCreateBlank,
+      guardUnsavedDraft,
+      items,
+      unsavedNewIds,
+    ]);
 
     // ── Expose imperative handle ──────────────────────────────────────────────
     useImperativeHandle(ref, () => ({
@@ -336,20 +698,48 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       return () => document.removeEventListener('mousedown', handler);
     }, [showViewMenu, openActionMenuId]);
 
-    // ── V3: auto-append blank row after the first filled item is complete ─────
+    // ── V3: keep a trailing blank row for continuous item entry ─────────────
     useEffect(() => {
-      if (!autoPopulateBlankRow || disabled) return;
-
-      if (filledLineItems(items).length === 0) return;
+      if (!autoPopulateBlankRow || disabled || items.length === 0) return;
 
       const last = items[items.length - 1];
       if (isBlankLineItem(last)) return;
-      if (!isLineItemComplete(last, options)) return;
 
       const blank = createBlankLineItem(`blank-${Date.now()}`, defaultVendor, options);
       onChange([...items, blank]);
-      setExpandedIds((prev) => new Set([...prev, blank.id]));
     }, [autoPopulateBlankRow, disabled, defaultVendor, items, onChange, options]);
+
+    // Focus trailing blank row only after explicit Add or successful Save
+    useEffect(() => {
+      if (!autoPopulateBlankRow || disabled || !focusBlankRowRef.current) return;
+      const last = items[items.length - 1];
+      if (!last || !isBlankLineItem(last)) return;
+
+      const otherEditing = [...editingIds].filter((id) => id !== last.id);
+      if (otherEditing.length > 0) return;
+
+      if (!editingIds.has(last.id)) {
+        enterEditMode(last.id, last, true);
+      }
+
+      requestAnimationFrame(() => {
+        focusFormField(last.id, 'description');
+        rowRefs.current.get(last.id)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        focusBlankRowRef.current = false;
+      });
+    }, [autoPopulateBlankRow, disabled, editingIds, enterEditMode, focusFormField, items]);
+
+    // Warn before page unload when drafts are dirty
+    useEffect(() => {
+      const handler = (e: BeforeUnloadEvent) => {
+        if (hasAnyUnsavedDrafts(editingIds, draftValues, items, unsavedNewIds)) {
+          e.preventDefault();
+          e.returnValue = '';
+        }
+      };
+      window.addEventListener('beforeunload', handler);
+      return () => window.removeEventListener('beforeunload', handler);
+    }, [draftValues, editingIds, items, unsavedNewIds]);
 
     // ── Focus mode: lock body scroll while full-screen ────────────────────────
     useEffect(() => {
@@ -362,7 +752,8 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
     }, [focusMode]);
 
     // ── Expand/collapse ───────────────────────────────────────────────────────
-    const toggleExpand = (id: string) => {
+    // ── Expand/collapse ───────────────────────────────────────────────────────
+    const doToggleExpand = (id: string) => {
       setExpandedIds((prev) => {
         const next = new Set(prev);
         if (next.has(id)) next.delete(id);
@@ -370,8 +761,121 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
         return next;
       });
     };
+
+    const toggleExpand = (id: string) => {
+      if (expandedIds.has(id) && editingIds.has(id)) {
+        guardUnsavedDraft(id, () => doToggleExpand(id));
+        return;
+      }
+      doToggleExpand(id);
+    };
     const expandAll = () => setExpandedIds(new Set(filteredItems.map((i) => i.id)));
     const collapseAll = () => setExpandedIds(new Set());
+
+    const handleInlineSave = async (itemId: string) => {
+      if (savingIds.has(itemId)) return;
+      const draft = draftValues[itemId];
+      if (!draft || disabled) return;
+
+      const fieldDefsAll = getLineItemFieldDefinitions(options).filter((f) => f.visible);
+      const nextErrors = validateLineItemForm(draft, options);
+
+      setSaveAttemptedIds((prev) => new Set([...prev, itemId]));
+      setDraftErrors((prev) => ({ ...prev, [itemId]: nextErrors }));
+      setDraftTouched((prev) => ({
+        ...prev,
+        [itemId]: Object.fromEntries(fieldDefsAll.map((f) => [f.key, true])) as Partial<
+          Record<LineItemFieldKey, boolean>
+        >,
+      }));
+
+      if (hasLineItemErrors(nextErrors)) {
+        requestAnimationFrame(() => {
+          const firstKey = fieldDefsAll.find((f) => nextErrors[f.key])?.key;
+          if (!firstKey) return;
+          const el = rowRefs.current
+            .get(itemId)
+            ?.querySelector<HTMLElement>(`[data-field="${firstKey}"]`);
+          el?.focus();
+        });
+        return;
+      }
+
+      setSavingIds((prev) => new Set([...prev, itemId]));
+      setSaveErrorIds((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+
+      try {
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 300);
+        });
+
+        const wasNew = unsavedNewIds.has(itemId);
+        onChange(
+          items.map((i) =>
+            i.id === itemId ? fromFormValues(i.id, { ...draft, glAccounts: [] }) : i,
+          ),
+        );
+        exitEditMode(itemId);
+        setExpandedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(itemId);
+          return next;
+        });
+        flashSavedRow(itemId);
+        announceSaveSuccess(
+          wasNew
+            ? 'Item saved — continue with the next row below.'
+            : 'Changes saved successfully.',
+        );
+        if (autoPopulateBlankRow) {
+          focusTrailingBlankRow();
+        }
+        if (wasNew) onItemAdded?.(draft.description);
+      } catch {
+        setSaveErrorIds((prev) => new Set([...prev, itemId]));
+      } finally {
+        setSavingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(itemId);
+          return next;
+        });
+      }
+    };
+
+    const handleCancelEdit = (itemId: string) => {
+      if (disabled) return;
+      if (unsavedNewIds.has(itemId)) {
+        onChange(finalizeItemsAfterRemoval(items.filter((i) => i.id !== itemId)));
+        setExpandedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(itemId);
+          return next;
+        });
+      }
+      exitEditMode(itemId);
+    };
+
+    // Keyboard: Ctrl/Cmd+Enter saves the active inline edit
+    useEffect(() => {
+      if (editingIds.size === 0 || disabled) return;
+      const onKey = (e: KeyboardEvent) => {
+        if (!(e.metaKey || e.ctrlKey) || e.key !== 'Enter') return;
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'TEXTAREA') return;
+        const activeId = [...editingIds][0];
+        if (!activeId || savingIds.has(activeId)) return;
+        e.preventDefault();
+        handleInlineSave(activeId);
+      };
+      document.addEventListener('keydown', onKey);
+      return () => document.removeEventListener('keydown', onKey);
+      // handleInlineSave is stable enough for this session-scoped shortcut
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [disabled, editingIds, savingIds]);
 
     // ── Modal save ────────────────────────────────────────────────────────────
     const handleSaveForm = (
@@ -387,6 +891,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
         let next = [...items];
         const last = next[next.length - 1];
         if (autoPopulateBlankRow && last && isBlankLineItem(last)) {
+          exitEditMode(last.id);
           next[next.length - 1] = newItem;
         } else {
           next = [...next, newItem];
@@ -399,8 +904,14 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
     };
 
     // ── Inline editing ────────────────────────────────────────────────────────
-    const startInline = (id: string, field: InlineEdit['field'], currentVal: string | number) => {
-      if (disabled) return;
+    const startInline = (
+      id: string,
+      field: InlineEdit['field'],
+      currentVal: string | number,
+      e?: MouseEvent,
+    ) => {
+      if (disabled || editingIds.has(id)) return;
+      e?.stopPropagation();
       setInlineEdit({ id, field });
       setInlineValue(String(currentVal));
     };
@@ -411,7 +922,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       onChange(
         items.map((item) => {
           if (item.id !== id) return item;
-          if (field === 'description') return { ...item, item: inlineValue };
+          if (field === 'description') return { ...item, item: inlineValue.trim() };
           if (field === 'quantity') {
             const q = Math.max(0.01, parseFloat(inlineValue) || item.quantity);
             return { ...item, quantity: q, subtotal: q * item.cost };
@@ -430,13 +941,8 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
     const isInline = (id: string, field: InlineEdit['field']) =>
       inlineEdit?.id === id && inlineEdit.field === field;
 
-    // ── Duplicate ─────────────────────────────────────────────────────────────
-    const duplicateItem = (item: PRLineItem) => {
-      const copy: PRLineItem = { ...item, id: Date.now().toString() };
-      const idx = items.findIndex((i) => i.id === item.id);
-      const next = [...items];
-      next.splice(idx + 1, 0, copy);
-      onChange(next);
+    const stopRowToggle = (e: MouseEvent) => {
+      e.stopPropagation();
     };
 
     const isBulkDeletePending = deleteConfirm?.source === 'bulk';
@@ -456,9 +962,23 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
 
     const cancelDelete = () => setDeleteConfirm(null);
 
+    const performRowEdit = (item: PRLineItem) => {
+      if (autoPopulateBlankRow) {
+        setExpandedIds((prev) => new Set([...prev, item.id]));
+        enterEditMode(item.id, item, isBlankLineItem(item) || unsavedNewIds.has(item.id));
+      } else {
+        setFormModal({ mode: 'edit', itemId: item.id });
+      }
+    };
+
     const handleRowEdit = (item: PRLineItem) => {
       if (disabled) return;
-      setFormModal({ mode: 'edit', itemId: item.id });
+      const otherEditing = [...editingIds].find((id) => id !== item.id);
+      if (otherEditing) {
+        guardUnsavedDraft(otherEditing, () => performRowEdit(item));
+        return;
+      }
+      performRowEdit(item);
     };
 
     // ── Shared inline cell ────────────────────────────────────────────────────
@@ -470,6 +990,9 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       bold,
       muted,
       editValue,
+      placeholder,
+      currency = false,
+      inline = false,
     }: {
       id: string;
       field: InlineEdit['field'];
@@ -478,36 +1001,84 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       bold?: boolean;
       muted?: boolean;
       editValue?: string | number;
+      placeholder?: string;
+      currency?: boolean;
+      inline?: boolean;
     }) => {
       const active = isInline(id, field);
+      const resolvedEditValue = editValue ?? display.replace(/^[^\d.-]+/, '').replace(/,/g, '');
+
+      const inputStyle: React.CSSProperties = {
+        width: inline ? '88px' : '100%',
+        height: '30px',
+        border: `1.5px solid ${P2P_BRAND.primary}`,
+        borderRadius: '4px',
+        padding: currency ? '0 8px 0 36px' : '0 8px',
+        fontSize: '13px',
+        fontFamily: F,
+        color: '#101828',
+        outline: 'none',
+        background: P2P_BRAND.surface,
+        boxSizing: 'border-box',
+      };
+
       if (active) {
-        return (
+        const input = (
           <input
             autoFocus
             type={type}
             value={inlineValue}
+            placeholder={placeholder}
+            data-inline-cell
+            onMouseDown={stopRowToggle}
+            onClick={stopRowToggle}
             onChange={(e) => setInlineValue(e.target.value)}
             onBlur={commitInline}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') commitInline();
-              if (e.key === 'Escape') cancelInline();
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commitInline();
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelInline();
+              }
             }}
-            style={{
-              width: '100%',
-              height: '30px',
-              border: `1.5px solid ${P2P_BRAND.primary}`,
-              borderRadius: '4px',
-              padding: '0 8px',
-              fontSize: '13px',
-              fontFamily: F,
-              color: '#101828',
-              outline: 'none',
-              background: P2P_BRAND.surface,
-              boxSizing: 'border-box',
-            }}
+            style={inputStyle}
           />
         );
+
+        if (currency) {
+          return (
+            <div
+              style={{ position: 'relative', width: '100%', minWidth: '88px' }}
+              data-inline-cell
+              onMouseDown={stopRowToggle}
+              onClick={stopRowToggle}
+            >
+              <span
+                style={{
+                  position: 'absolute',
+                  left: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  fontSize: '12px',
+                  color: '#667085',
+                  fontFamily: F,
+                  pointerEvents: 'none',
+                  zIndex: 1,
+                }}
+              >
+                {LINE_ITEM_CURRENCY_PREFIX}
+              </span>
+              {input}
+            </div>
+          );
+        }
+
+        return input;
       }
+
       const cellIdleStyle: React.CSSProperties = {
         fontSize: '13px',
         fontWeight: bold && !muted ? 700 : 400,
@@ -517,15 +1088,16 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
         cursor: disabled ? 'default' : 'text',
         padding: '4px 8px',
         borderRadius: '4px',
-        display: 'block',
+        display: inline ? 'inline-block' : 'block',
         minHeight: '28px',
         lineHeight: '20px',
         boxSizing: 'border-box',
-        border: disabled ? '1px solid transparent' : `1px solid transparent`,
+        border: '1px solid transparent',
         background: 'transparent',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
+        verticalAlign: 'middle',
         transition: 'border-color 0.12s, background 0.12s, box-shadow 0.12s',
       };
 
@@ -538,16 +1110,18 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
 
       return (
         <span
-          role="button"
+          data-inline-cell
           tabIndex={disabled ? -1 : 0}
           title={disabled ? undefined : 'Click to edit'}
-          onClick={() =>
-            !disabled &&
-            startInline(id, field, editValue ?? display.replace('Rs. ', ''))
-          }
+          onMouseDown={(e) => {
+            stopRowToggle(e);
+            if (!disabled) startInline(id, field, resolvedEditValue, e);
+          }}
           onKeyDown={(e) => {
-            if ((e.key === 'Enter' || e.key === ' ') && !disabled)
-              startInline(id, field, display.replace('Rs. ', ''));
+            if ((e.key === 'Enter' || e.key === ' ') && !disabled) {
+              e.preventDefault();
+              startInline(id, field, resolvedEditValue);
+            }
           }}
           style={cellIdleStyle}
           onMouseEnter={(e) => applyCellHighlight(e.currentTarget, true)}
@@ -566,22 +1140,66 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
         ? items.find((i) => i.id === formModal.itemId)
         : undefined;
 
+    const DraftRowPrompt = ({
+      onClick,
+      label,
+    }: {
+      onClick: () => void;
+      label: string;
+    }) => (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+        title="Start adding the next line item"
+        style={draftRowPromptStyle}
+      >
+        {label}
+      </button>
+    );
+
     // ── Mobile card layout ────────────────────────────────────────────────────
     const MobileCard = ({ item, index }: { item: PRLineItem; index: number }) => {
       const isExpanded = expandedIds.has(item.id);
       const errorCount = getErrorCount(item, index);
       const itemErrors = getItemErrors(item);
+      const rowDisplay = getRowDisplay(item);
+      const isEditing = rowDisplay.isEditing;
+      const isSavedFlash = savedFlashIds.has(item.id);
       const isDraftRow = autoPopulateBlankRow && isTrailingBlankItem(items, item, index);
 
       return (
         <div
           ref={(el) => { if (el) rowRefs.current.set(item.id, el); }}
           style={{
-            background: selectedIds.has(item.id) ? '#FAFBFC' : '#FFFFFF',
-            border: errorCount > 0 ? '1.5px solid #FECDCA' : selectedIds.has(item.id) ? '1px solid #E4E7EC' : '1px solid #E4E7EC',
+            background: isSavedFlash
+              ? '#F6FEF9'
+              : isDraftRow && !isEditing
+                ? '#FAFBFC'
+                : isEditing
+                  ? P2P_BRAND.surface
+                  : selectedIds.has(item.id)
+                    ? '#FAFBFC'
+                    : '#FFFFFF',
+            border: isSavedFlash
+              ? '1.5px solid #A7F3D0'
+              : isDraftRow && !isEditing
+                ? '1.5px dashed #D0D5DD'
+                : isEditing
+                  ? `1.5px solid ${P2P_BRAND.surfaceBorder}`
+                  : errorCount > 0
+                    ? '1.5px solid #FECDCA'
+                    : '1px solid #E4E7EC',
             borderRadius: '10px',
             marginBottom: '10px',
             overflow: 'hidden',
+            boxShadow: isSavedFlash
+              ? 'inset 3px 0 0 #12B76A'
+              : isDraftRow && !isEditing
+                ? `inset 3px 0 0 ${P2P_BRAND.primary}`
+                : undefined,
           }}
         >
           {/* Card header row */}
@@ -603,7 +1221,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
               type="button"
               onClick={() => toggleExpand(item.id)}
               aria-expanded={isExpanded}
-              aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
+              aria-label={isExpanded ? 'Collapse details' : 'View item details'}
               style={{
                 ...iconButtonStyle,
                 flexShrink: 0,
@@ -618,11 +1236,19 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
             </button>
 
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '11px', color: '#98A2B3', fontFamily: F }}>
                   #{index + 1}
                 </span>
-                {errorCount > 0 && (
+                {isEditing && (
+                  <span style={editingBadgeStyle}>
+                    {rowDisplay.isNew ? 'New item' : 'Editing'}
+                  </span>
+                )}
+                {isDraftRow && !isEditing && (
+                  <span style={draftRowBadgeStyle}>Next item</span>
+                )}
+                {errorCount > 0 && !isEditing && (
                   <span
                     style={{
                       display: 'inline-flex',
@@ -641,47 +1267,112 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                     {errorCount} issue{errorCount !== 1 ? 's' : ''}
                   </span>
                 )}
+                {isSavedFlash && !isEditing && (
+                  <span style={savedBadgeStyle} role="status">
+                    <CheckCircle2 size={10} strokeWidth={2.5} aria-hidden />
+                    Saved
+                  </span>
+                )}
               </div>
-              <InlineCell
-                id={item.id}
-                field="description"
-                display={
-                  item.item ||
-                  (autoPopulateBlankRow && isBlankLineItem(item)
-                    ? 'Add description…'
-                    : 'Untitled item')
-                }
-                editValue={item.item}
-                muted={autoPopulateBlankRow && isBlankLineItem(item)}
-                bold
-              />
-              <div style={{ fontSize: '11px', color: '#98A2B3', fontFamily: F, marginTop: '3px' }}>
-                {item.type || 'Goods'}
-                {item.unitOfMeasure ? ` · ${item.unitOfMeasure}` : ''}
-                {' · '}
-                {item.vendor}
-              </div>
+              {isEditing ? (
+                <div
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: rowDisplay.muted ? 500 : 700,
+                    color: rowDisplay.muted ? '#667085' : '#101828',
+                    fontStyle: rowDisplay.muted ? 'italic' : undefined,
+                    fontFamily: F,
+                    minWidth: 0,
+                  }}
+                >
+                  {rowDisplay.description}
+                </div>
+              ) : rowDisplay.isDraftBlank ? (
+                <DraftRowPrompt
+                  label={rowDisplay.description}
+                  onClick={() => handleRowEdit(item)}
+                />
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <InlineCell
+                      id={item.id}
+                      field="description"
+                      display={rowDisplay.description}
+                      editValue={item.item}
+                      placeholder="Add description…"
+                      muted={rowDisplay.muted}
+                      bold
+                    />
+                  </div>
+                </div>
+              )}
+              {!isEditing && !rowDisplay.isDraftBlank && (
+                <div style={{ fontSize: '11px', color: '#98A2B3', fontFamily: F, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span>
+                    {item.type || 'Goods'}
+                    {item.unitOfMeasure ? ` · ${item.unitOfMeasure}` : ''}
+                    {' · '}
+                    {item.vendor}
+                  </span>
+                </div>
+              )}
+              {rowDisplay.isDraftBlank && !isEditing && (
+                <div style={{ fontSize: '11px', color: '#667085', fontFamily: F, marginTop: '3px' }}>
+                  Tap to start the next line item
+                </div>
+              )}
+              {isEditing && !isExpanded && (
+                <div style={{ fontSize: '11px', color: '#667085', fontFamily: F, marginTop: '3px' }}>
+                  Expand to fill in item details
+                </div>
+              )}
             </div>
 
             <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <button
-                  type="button"
-                  onClick={() => handleRowEdit(item)}
-                  disabled={disabled}
-                  title="Edit all fields"
-                  style={iconButtonStyle}
-                >
-                  <Edit3 size={14} color="#667085" strokeWidth={2} />
-                </button>
-              </div>
+              {!isEditing && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleRowEdit(item)}
+                    disabled={disabled}
+                    title="Edit all fields"
+                    style={iconButtonStyle}
+                  >
+                    <Edit3 size={14} color="#667085" strokeWidth={2} />
+                  </button>
+                </div>
+              )}
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#101828', fontFamily: F }}>
-                {fmtRs(item.subtotal)}
+                {fmtRs(rowDisplay.subtotal)}
               </div>
               <div style={{ fontSize: '11px', color: '#98A2B3', fontFamily: F, marginTop: '2px' }}>
-                <InlineCell id={item.id} field="quantity" display={String(item.quantity)} type="number" />
-                {' × '}
-                <InlineCell id={item.id} field="cost" display={fmtRs(item.cost)} type="number" />
+                {isEditing ? (
+                  <>
+                    {rowDisplay.quantity} × {fmtRs(rowDisplay.cost)}
+                  </>
+                ) : (
+                  <>
+                    <InlineCell
+                      id={item.id}
+                      field="quantity"
+                      display={String(item.quantity)}
+                      editValue={item.quantity}
+                      type="number"
+                      inline
+                    />
+                    {' × '}
+                    <InlineCell
+                      id={item.id}
+                      field="cost"
+                      display={fmtRs(item.cost)}
+                      editValue={item.cost}
+                      type="number"
+                      currency
+                      inline
+                    />
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -694,69 +1385,13 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                 animate={{ height: 'auto', opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 transition={{ duration: 0.18 }}
-                style={{ overflow: 'hidden', padding: '0 12px 12px' }}
+                style={{ overflow: 'hidden', padding: isEditing ? '0 12px 0' : '0 12px 12px' }}
               >
-                <div style={expandedDetailShellStyle}>
-                  <div style={expandedDetailBodyStyle}>
-                    <div style={expandedDetailGridStyle}>
-                  {fieldDefs
-                    .filter((f) => f.visible)
-                    .map((field) => {
-                      const hasError = Boolean(itemErrors[field.key]);
-                      return (
-                        <div key={field.key}>
-                          <div style={expandedFieldLabelStyle}>
-                            {field.label}
-                          </div>
-                          <div
-                            style={{
-                              ...expandedFieldValueStyle,
-                              color: hasError ? '#B42318' : '#101828',
-                              fontWeight: hasError ? 600 : 500,
-                            }}
-                          >
-                            {getDetailValue(item, field.key)}
-                          </div>
-                          {hasError && (
-                            <div style={{ fontSize: '10px', color: '#B42318', fontFamily: F, marginTop: '2px' }}>
-                              {itemErrors[field.key]}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                    </div>
-                  </div>
-
-                {/* Card actions — secondary only; Edit/Remove live in the card header */}
-                <div style={expandedDetailFooterStyle}>
-                  {onOpenGL && (
-                    <button type="button" onClick={() => onOpenGL(item.id)} style={glChipStyle}>
-                      {item.glAccountsCount || 1} GL
-                    </button>
-                  )}
-                  {onOpenBudget && (
-                    <button
-                      type="button"
-                      onClick={() => onOpenBudget(item.id)}
-                      style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
-                    >
-                      <DollarSign size={13} color="#EF4444" strokeWidth={2} />
-                      Budget
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => duplicateItem(item)}
-                    disabled={disabled}
-                    title="Duplicate item"
-                    style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
-                  >
-                    <Copy size={13} color="#667085" strokeWidth={2} />
-                    Duplicate
-                  </button>
-                </div>
-                </div>
+                {isEditing ? (
+                  renderExpandedPanel(item, itemErrors, autoPopulateBlankRow)
+                ) : (
+                  renderExpandedPanel(item, itemErrors, autoPopulateBlankRow)
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -781,6 +1416,230 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       }
     };
 
+    const getRowDisplay = (item: PRLineItem) => {
+      const draft = draftValues[item.id];
+      if (isItemEditing(item.id) && draft) {
+        const isNew = isUnsavedNewItem(item.id);
+        return {
+          description: draft.description.trim() || (isNew ? 'New line item' : 'Editing…'),
+          quantity: draft.quantity,
+          cost: draft.cost,
+          subtotal: draft.quantity * draft.cost,
+          muted: !draft.description.trim(),
+          isEditing: true,
+          isNew,
+          isDraftBlank: false,
+        };
+      }
+      return {
+        description:
+          item.item ||
+          (autoPopulateBlankRow && isBlankLineItem(item)
+            ? 'Add next line item…'
+            : 'Untitled item'),
+        quantity: item.quantity,
+        cost: item.cost,
+        subtotal: item.subtotal,
+        muted: autoPopulateBlankRow && isBlankLineItem(item),
+        isEditing: false,
+        isNew: false,
+        isDraftBlank: autoPopulateBlankRow && isBlankLineItem(item),
+      };
+    };
+
+    const editingBadgeStyle: React.CSSProperties = {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '4px',
+      fontSize: '10px',
+      fontWeight: 700,
+      color: P2P_BRAND.primaryStrong,
+      background: P2P_BRAND.surface,
+      border: `1px solid ${P2P_BRAND.surfaceBorder}`,
+      borderRadius: '999px',
+      padding: '2px 8px',
+      flexShrink: 0,
+      fontFamily: F,
+      letterSpacing: '0.02em',
+      textTransform: 'uppercase',
+    };
+
+    const renderExpandedPanel = (
+      item: PRLineItem,
+      itemErrors: LineItemValidationErrors,
+      isV3: boolean,
+    ) => {
+      const isEditing = isItemEditing(item.id);
+      const isNew = isUnsavedNewItem(item.id);
+      const draft = draftValues[item.id];
+
+      if (isEditing && draft) {
+        const isSaving = savingIds.has(item.id);
+        const saveFailed = saveErrorIds.has(item.id);
+        return (
+          <>
+            <LineItemInlineForm
+              itemId={item.id}
+              values={draft}
+              onChange={(values) => updateDraft(item.id, values)}
+              onFieldBlur={(key) => blurDraftField(item.id, key)}
+              onFieldManualEdit={(key) => clearFieldHighlight(item.id, key)}
+              errors={draftErrors[item.id] || {}}
+              touched={draftTouched[item.id] || {}}
+              showAllErrors={saveAttemptedIds.has(item.id)}
+              options={options}
+              isNewItem={isNew}
+              autoFocus={isNew && !autoPopulatedFields[item.id]?.size}
+              highlightedFields={autoPopulatedFields[item.id]}
+              onOpenItemSearch={() => openItemSelect(item.id)}
+              onSaveRequest={() => handleInlineSave(item.id)}
+            />
+            <div style={{ ...expandedDetailFooterStyle, flexWrap: 'wrap', gap: '8px', borderTop: '1px solid #EEF1F5', padding: '11px 0 0', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={() => handleInlineSave(item.id)}
+                disabled={disabled || isSaving}
+                aria-busy={isSaving}
+                style={{
+                  ...primaryButtonStyle,
+                  height: '32px',
+                  opacity: disabled || isSaving ? 0.65 : 1,
+                  cursor: disabled || isSaving ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 size={14} strokeWidth={2.5} aria-hidden className="animate-spin" />
+                    Saving…
+                  </>
+                ) : isNew ? (
+                  'Save item'
+                ) : (
+                  'Save changes'
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCancelEdit(item.id)}
+                disabled={disabled || isSaving}
+                style={{
+                  ...secondaryButtonStyle,
+                  height: '32px',
+                  opacity: isSaving ? 0.5 : 1,
+                  cursor: isSaving ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {isNew ? 'Discard' : 'Cancel'}
+              </button>
+              {!isSaving && (
+                <span style={saveShortcutHintStyle}>Ctrl+Enter to save</span>
+              )}
+              {saveFailed && (
+                <span
+                  role="alert"
+                  style={{
+                    flexBasis: '100%',
+                    fontSize: '11px',
+                    color: '#B42318',
+                    fontFamily: F,
+                    fontWeight: 500,
+                  }}
+                >
+                  Save failed. Please try again.
+                </span>
+              )}
+            </div>
+          </>
+        );
+      }
+
+      return (
+        <>
+          <div style={expandedDetailBodyStyle}>
+            <div style={expandedDetailGridStyle}>
+              {fieldDefs
+                .filter((f) => f.visible)
+                .map((field) => {
+                  const hasError = Boolean(itemErrors[field.key]);
+                  return (
+                    <div key={field.key}>
+                      <div style={expandedFieldLabelStyle}>{field.label}</div>
+                      <div
+                        style={{
+                          ...expandedFieldValueStyle,
+                          color: hasError ? '#B42318' : '#101828',
+                          fontWeight: hasError ? 600 : 500,
+                        }}
+                      >
+                        {getDetailValue(item, field.key)}
+                      </div>
+                      {hasError && (
+                        <div
+                          style={{
+                            fontSize: '10px',
+                            color: '#B42318',
+                            fontFamily: F,
+                            marginTop: '2px',
+                          }}
+                        >
+                          {itemErrors[field.key]}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
+          <div style={{ ...expandedDetailFooterStyle, borderTop: '1px solid #EEF1F5', marginTop: '4px' }}>
+            {isV3 && (
+              <button
+                type="button"
+                onClick={() => handleRowEdit(item)}
+                disabled={disabled}
+                style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
+              >
+                <Edit3 size={12} strokeWidth={2} aria-hidden />
+                Edit fields
+              </button>
+            )}
+            {onOpenGL && (
+              <button
+                type="button"
+                onClick={() => onOpenGL(item.id)}
+                style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
+              >
+                GL distribution ({item.glAccountsCount || 1})
+              </button>
+            )}
+            {onOpenBudget && (
+              <button
+                type="button"
+                onClick={() => onOpenBudget(item.id)}
+                style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
+              >
+                <DollarSign size={12} color="#EF4444" strokeWidth={2} aria-hidden />
+                Check budget
+              </button>
+            )}
+            {onOpenBudgetReport && (
+              <button
+                type="button"
+                onClick={() => onOpenBudgetReport(item.id)}
+                style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
+              >
+                <ExternalLink size={12} strokeWidth={2} aria-hidden />
+                Budget report
+              </button>
+            )}
+          </div>
+        </>
+      );
+    };
+
     const isV3Layout = autoPopulateBlankRow;
     const desktopColCount = isV3Layout ? 8 : showTax ? 12 : 11;
     const tableMinWidth = isV3Layout ? '640px' : '1080px';
@@ -799,7 +1658,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                 flexDirection: 'column',
                 overflow: 'hidden',
               }
-            : { overflow: 'hidden' }
+            : { overflow: 'hidden', position: 'relative' }
         }
       >
         {focusMode && (
@@ -832,6 +1691,26 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
             </button>
           </div>
         )}
+
+        {/* Screen reader announcements */}
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          style={{
+            position: 'absolute',
+            width: 1,
+            height: 1,
+            padding: 0,
+            margin: -1,
+            overflow: 'hidden',
+            clip: 'rect(0,0,0,0)',
+            whiteSpace: 'nowrap',
+            border: 0,
+          }}
+        >
+          {saveAnnouncement}
+        </div>
 
         {/* Toolbar */}
         <div
@@ -966,7 +1845,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
           {showAddItemButton && (
             <button
               type="button"
-              onClick={() => setFormModal({ mode: 'add' })}
+              onClick={handleAddItem}
               disabled={disabled}
               style={{
                 ...primaryButtonStyle,
@@ -979,6 +1858,40 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
             </button>
           )}
         </div>
+
+        {/* Save confirmation toast */}
+        <AnimatePresence>
+          {saveAnnouncement && (
+            <motion.div
+              key="save-toast"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.18 }}
+              style={{ overflow: 'hidden', flexShrink: 0 }}
+            >
+              <div style={saveToastBarStyle} role="status" aria-live="polite">
+                <CheckCircle2 size={15} color="#027A48" strokeWidth={2.25} aria-hidden />
+                <span style={saveToastTextStyle}>{saveAnnouncement}</span>
+                <button
+                  type="button"
+                  onClick={dismissSaveAnnouncement}
+                  aria-label="Dismiss notification"
+                  style={saveToastDismissStyle}
+                >
+                  <X size={14} color="#667085" strokeWidth={2} />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Interaction hint — V3 only, hidden while toast is visible */}
+        {autoPopulateBlankRow && filledItemCount > 0 && !saveAnnouncement && !isMobile && (
+          <div style={interactionHintBarStyle}>
+            Expand a row to view details · Edit icon to change fields · Search inventory when adding or editing a row
+          </div>
+        )}
 
         {/* Bulk selection bar */}
         <LineItemSelectionBar
@@ -999,7 +1912,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
             {filteredItems.length === 0 ? (
               <EmptyState
                 searchQuery={searchQuery}
-                onAdd={() => setFormModal({ mode: 'add' })}
+                onAdd={handleAddItem}
                 hideAddButton={!showAddItemButton}
               />
             ) : (
@@ -1085,6 +1998,10 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                     const requiredByLabel = formatRequiredBy(item.requiredBy);
                     const isDraftRow = autoPopulateBlankRow && isTrailingBlankItem(items, item, itemIndex);
                     const isRowSelected = selectedIds.has(item.id);
+                    const rowDisplay = getRowDisplay(item);
+                    const isEditing = rowDisplay.isEditing;
+
+                    const isSavedFlash = savedFlashIds.has(item.id);
 
                     return (
                       <Fragment key={item.id}>
@@ -1098,41 +2015,38 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                           style={{
                             borderBottom: isExpanded ? 'none' : '1px solid #F2F4F7',
                             background:
-                              errorCount > 0
-                                ? '#FFFBFA'
-                                : isDraftRow
-                                  ? '#FAFBFC'
-                                  : isRowSelected
-                                    ? '#FAFBFC'
-                                    : isExpanded
+                              isSavedFlash
+                                ? '#F6FEF9'
+                                : isEditing
+                                  ? P2P_BRAND.surface
+                                  : errorCount > 0
+                                    ? '#FFFBFA'
+                                    : isDraftRow
                                       ? '#FAFBFC'
-                                      : hoveredRow === item.id
+                                      : isRowSelected
                                         ? '#FAFBFC'
-                                        : '#FFFFFF',
-                            outline: isDraftRow ? '1px dashed #D0D5DD' : undefined,
-                            outlineOffset: isDraftRow ? '-1px' : undefined,
-                            boxShadow:
-                              hoveredRow === item.id || isExpanded
+                                        : isExpanded
+                                          ? '#FAFBFC'
+                                          : hoveredRow === item.id
+                                            ? '#FAFBFC'
+                                            : '#FFFFFF',
+                            outline: isEditing
+                              ? `1px solid ${P2P_BRAND.surfaceBorder}`
+                              : isDraftRow
+                                ? '1px dashed #D0D5DD'
+                                : undefined,
+                            outlineOffset: isEditing || isDraftRow ? '-1px' : undefined,
+                            boxShadow: isSavedFlash
+                              ? 'inset 2px 0 0 #12B76A'
+                              : isDraftRow && !isEditing
                                 ? `inset 2px 0 0 ${P2P_BRAND.primary}`
-                                : isRowSelected
-                                  ? 'inset 2px 0 0 #E4E7EC'
-                                  : 'none',
+                                : isEditing || hoveredRow === item.id || isExpanded
+                                  ? `inset 2px 0 0 ${P2P_BRAND.primary}`
+                                  : isRowSelected
+                                    ? 'inset 2px 0 0 #E4E7EC'
+                                    : 'none',
                             transition: 'background 0.1s, box-shadow 0.1s',
-                            cursor: isV3Layout ? 'pointer' : undefined,
                           }}
-                          onClick={
-                            isV3Layout
-                              ? (e) => {
-                                  const target = e.target as HTMLElement;
-                                  if (
-                                    target.closest('button, input, [role="checkbox"], [role="button"]')
-                                  ) {
-                                    return;
-                                  }
-                                  toggleExpand(item.id);
-                                }
-                              : undefined
-                          }
                           onMouseEnter={() => setHoveredRow(item.id)}
                           onMouseLeave={() => setHoveredRow(null)}
                         >
@@ -1150,18 +2064,10 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                             <button
                               type="button"
                               onClick={() => toggleExpand(item.id)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'ArrowDown') {
-                                  e.preventDefault();
-                                  setExpandedIds((p) => new Set([...p, item.id]));
-                                }
-                                if (e.key === 'ArrowUp') {
-                                  e.preventDefault();
-                                  setExpandedIds((p) => { const n = new Set(p); n.delete(item.id); return n; });
-                                }
-                              }}
                               aria-expanded={isExpanded}
-                              aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
+                              aria-controls={`line-item-detail-${item.id}`}
+                              title={isExpanded ? 'Collapse details' : 'View item details'}
+                              aria-label={isExpanded ? 'Collapse details' : 'View item details'}
                               style={iconButtonStyle}
                             >
                               {isExpanded ? (
@@ -1177,25 +2083,54 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                             {index + 1}
                           </td>
 
-                          {/* Description */}
+                          {/* Description — compact preview only; full form lives in expanded panel */}
                           <td style={{ padding: '12px 14px', maxWidth: '260px' }}>
                             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                  <InlineCell
-                                    id={item.id}
-                                    field="description"
-                                    display={
-                                      item.item ||
-                                      (autoPopulateBlankRow && isBlankLineItem(item)
-                                        ? 'Add description…'
-                                        : 'Untitled item')
-                                    }
-                                    editValue={item.item}
-                                    muted={autoPopulateBlankRow && isBlankLineItem(item)}
-                                    bold
-                                  />
-                                  {!isExpanded && (
+                                  {isEditing && (
+                                    <span style={editingBadgeStyle}>
+                                      {rowDisplay.isNew ? 'New item' : 'Editing'}
+                                    </span>
+                                  )}
+                                  {isDraftRow && !isEditing && (
+                                    <span style={draftRowBadgeStyle}>Next item</span>
+                                  )}
+                                  {isEditing ? (
+                                    <span
+                                      style={{
+                                        fontSize: '13px',
+                                        fontWeight: rowDisplay.muted ? 500 : 700,
+                                        color: rowDisplay.muted ? '#667085' : '#101828',
+                                        fontStyle: rowDisplay.muted ? 'italic' : undefined,
+                                        fontFamily: F,
+                                        minWidth: 0,
+                                        flex: 1,
+                                      }}
+                                    >
+                                      {rowDisplay.description}
+                                    </span>
+                                  ) : rowDisplay.isDraftBlank ? (
+                                    <DraftRowPrompt
+                                      label={rowDisplay.description}
+                                      onClick={() => handleRowEdit(item)}
+                                    />
+                                  ) : (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                                      <div style={{ minWidth: 0, flex: 1 }}>
+                                        <InlineCell
+                                          id={item.id}
+                                          field="description"
+                                          display={rowDisplay.description}
+                                          editValue={item.item}
+                                          placeholder="Add description…"
+                                          muted={rowDisplay.muted}
+                                          bold
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+                                  {!isExpanded && !isEditing && (
                                   <>
                                     <span style={typeChipStyle}>{item.type || 'Goods'}</span>
                                     {isV3Layout && item.vendor && (
@@ -1216,15 +2151,20 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                                   </>
                                 )}
                               </div>
-                              {!isExpanded && item.unitOfMeasure && (
+                              {!isExpanded && !isEditing && item.unitOfMeasure && (
                                 <div style={{ fontSize: '11px', color: '#98A2B3', fontFamily: F, marginTop: '3px' }}>
                                   {item.quantity} {item.unitOfMeasure.toLowerCase()}
                                   {!isV3Layout && item.vendorTerms ? ` · ${item.vendorTerms}` : ''}
                                   {isV3Layout && gl.code ? ` · GL ${gl.code}` : ''}
                                 </div>
                               )}
+                              {isEditing && !isExpanded && (
+                                <div style={{ fontSize: '11px', color: '#667085', fontFamily: F, marginTop: '3px' }}>
+                                  Expand row to fill in item details
+                                </div>
+                              )}
                               </div>
-                              {errorCount > 0 && (
+                                  {errorCount > 0 && !isEditing && (
                                 <span
                                   title={`${errorCount} validation issue${errorCount !== 1 ? 's' : ''}`}
                                   role="img"
@@ -1245,6 +2185,12 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                                 >
                                   <AlertCircle size={10} strokeWidth={2.5} aria-hidden />
                                   {errorCount}
+                                </span>
+                              )}
+                              {isSavedFlash && !isEditing && (
+                                <span style={savedBadgeStyle} role="status">
+                                  <CheckCircle2 size={10} strokeWidth={2.5} aria-hidden />
+                                  Saved
                                 </span>
                               )}
                             </div>
@@ -1302,24 +2248,40 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                             </>
                           )}
 
-                          {/* Qty - inline editable */}
+                          {/* Qty — inline editable when collapsed */}
                           <td style={{ padding: '12px 14px' }}>
-                            <InlineCell
-                              id={item.id}
-                              field="quantity"
-                              display={String(item.quantity)}
-                              type="number"
-                            />
+                            {isEditing ? (
+                              <span style={{ fontSize: '13px', color: '#344054', fontFamily: F }}>
+                                {rowDisplay.quantity}
+                              </span>
+                            ) : (
+                              <InlineCell
+                                id={item.id}
+                                field="quantity"
+                                display={String(item.quantity)}
+                                editValue={item.quantity}
+                                type="number"
+                                inline
+                              />
+                            )}
                           </td>
 
-                          {/* Cost - inline editable */}
+                          {/* Unit cost — inline editable */}
                           <td style={{ padding: '12px 14px' }}>
-                            <InlineCell
-                              id={item.id}
-                              field="cost"
-                              display={fmtRs(item.cost)}
-                              type="number"
-                            />
+                            {isEditing ? (
+                              <span style={{ fontSize: '13px', color: '#344054', fontFamily: F }}>
+                                {fmtRs(rowDisplay.cost)}
+                              </span>
+                            ) : (
+                              <InlineCell
+                                id={item.id}
+                                field="cost"
+                                display={fmtRs(item.cost)}
+                                editValue={item.cost}
+                                type="number"
+                                currency
+                              />
+                            )}
                           </td>
 
                           {/* Tax */}
@@ -1331,7 +2293,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
 
                           {/* Sub total */}
                           <td style={{ padding: '12px 14px', fontSize: '13px', fontWeight: 700, color: '#101828', fontFamily: F }}>
-                            {fmtRs(item.subtotal)}
+                            {fmtRs(isEditing ? rowDisplay.subtotal : item.subtotal)}
                           </td>
 
                           {/* Actions */}
@@ -1343,13 +2305,17 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                                     position: 'sticky',
                                     right: 0,
                                     background:
-                                      errorCount > 0
-                                        ? '#FFFBFA'
-                                        : isDraftRow
-                                          ? '#FAFBFC'
-                                          : isRowSelected || isExpanded || hoveredRow === item.id
-                                            ? '#FAFBFC'
-                                            : '#FFFFFF',
+                                      isSavedFlash
+                                        ? '#F6FEF9'
+                                        : isEditing
+                                          ? P2P_BRAND.surface
+                                          : errorCount > 0
+                                            ? '#FFFBFA'
+                                            : isDraftRow
+                                              ? '#FAFBFC'
+                                              : isRowSelected || isExpanded || hoveredRow === item.id
+                                                ? '#FAFBFC'
+                                                : '#FFFFFF',
                                     zIndex: 1,
                                   }
                                 : {}),
@@ -1366,17 +2332,18 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                               }}
                             >
                               {isV3Layout ? (
-                                <>
+                                !isEditing ? (
                                   <button
                                     type="button"
                                     onClick={() => handleRowEdit(item)}
                                     disabled={disabled}
                                     title="Edit all fields"
+                                    aria-label="Edit all fields"
                                     style={iconButtonStyle}
                                   >
                                     <Edit3 size={14} color="#667085" strokeWidth={2} />
                                   </button>
-                                </>
+                                ) : null
                               ) : (
                                 <>
                                   <button
@@ -1426,19 +2393,6 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                                             minWidth: '168px',
                                           }}
                                         >
-                                          <button
-                                            type="button"
-                                            role="menuitem"
-                                            onClick={() => {
-                                              duplicateItem(item);
-                                              setOpenActionMenuId(null);
-                                            }}
-                                            disabled={disabled}
-                                            style={rowActionMenuItemStyle}
-                                          >
-                                            <Copy size={13} strokeWidth={2} aria-hidden />
-                                            Duplicate
-                                          </button>
                                           {onOpenGL && (
                                             <button
                                               type="button"
@@ -1495,6 +2449,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                           {isExpanded && (
                             <motion.tr
                               key={`${item.id}-details`}
+                              id={`line-item-detail-${item.id}`}
                               initial={{ opacity: 0 }}
                               animate={{ opacity: 1 }}
                               exit={{ opacity: 0 }}
@@ -1502,91 +2457,13 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                             >
                               <td
                                 colSpan={desktopColCount}
-                                style={{ padding: '8px 14px 12px', borderBottom: '1px solid #E4E7EC', background: '#FFFFFF' }}
+                                style={{
+                                  padding: isEditing ? '4px 14px 12px 58px' : '4px 14px 12px 58px',
+                                  borderBottom: '1px solid #E4E7EC',
+                                  background: '#FFFFFF',
+                                }}
                               >
-                                <div style={{ ...expandedDetailShellStyle, marginLeft: '44px' }}>
-                                  <div style={expandedDetailBodyStyle}>
-                                    <div style={expandedDetailGridStyle}>
-                                    {fieldDefs
-                                      .filter((f) => f.visible)
-                                      .map((field) => {
-                                        const hasError = Boolean(itemErrors[field.key]);
-                                        return (
-                                          <div key={field.key}>
-                                            <div style={expandedFieldLabelStyle}>
-                                              {field.label}
-                                            </div>
-                                            <div
-                                              style={{
-                                                ...expandedFieldValueStyle,
-                                                color: hasError ? '#B42318' : '#101828',
-                                                fontWeight: hasError ? 600 : 500,
-                                              }}
-                                            >
-                                              {getDetailValue(item, field.key)}
-                                            </div>
-                                            {hasError && (
-                                              <div
-                                                style={{
-                                                  fontSize: '10px',
-                                                  color: '#B42318',
-                                                  fontFamily: F,
-                                                  marginTop: '2px',
-                                                }}
-                                              >
-                                                {itemErrors[field.key]}
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-
-                                  <div style={expandedDetailFooterStyle}>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        duplicateItem(item);
-                                        if (!isV3Layout) toggleExpand(item.id);
-                                      }}
-                                      disabled={disabled}
-                                      style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
-                                    >
-                                      <Copy size={12} strokeWidth={2} aria-hidden />
-                                      Duplicate
-                                    </button>
-                                    {onOpenGL && (
-                                      <button
-                                        type="button"
-                                        onClick={() => onOpenGL(item.id)}
-                                        style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
-                                      >
-                                        GL distribution ({item.glAccountsCount || 1})
-                                      </button>
-                                    )}
-                                    {onOpenBudget && (
-                                      <button
-                                        type="button"
-                                        onClick={() => onOpenBudget(item.id)}
-                                        style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
-                                      >
-                                        <DollarSign size={12} color="#EF4444" strokeWidth={2} aria-hidden />
-                                        Check budget
-                                      </button>
-                                    )}
-                                    {onOpenBudgetReport && (
-                                      <button
-                                        type="button"
-                                        onClick={() => onOpenBudgetReport(item.id)}
-                                        style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
-                                      >
-                                        <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                                        Budget report
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
+                                {renderExpandedPanel(item, itemErrors, isV3Layout)}
                               </td>
                             </motion.tr>
                           )}
@@ -1601,7 +2478,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                     <td colSpan={desktopColCount}>
                       <EmptyState
                         searchQuery={searchQuery}
-                        onAdd={() => setFormModal({ mode: 'add' })}
+                        onAdd={handleAddItem}
                         hideAddButton={!showAddItemButton}
                       />
                     </td>
@@ -1617,7 +2494,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
           <div
             style={{
               display: 'flex',
-              justifyContent: 'space-between',
+              justifyContent: 'flex-end',
               alignItems: 'center',
               padding: '12px 16px',
               borderTop: '2px solid #E4E7EC',
@@ -1626,50 +2503,6 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
               gap: '8px',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#344054', fontFamily: F }}>
-                {filledItemCount} item{filledItemCount !== 1 ? 's' : ''}
-              </span>
-              {totalItemErrors > 0 && (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    color: '#B42318',
-                    background: '#FEF3F2',
-                    border: '1px solid #FECDCA',
-                    borderRadius: '999px',
-                    padding: '2px 8px',
-                  }}
-                >
-                  <AlertCircle size={11} strokeWidth={2.5} aria-hidden />
-                  {totalItemErrors} item{totalItemErrors !== 1 ? 's have' : ' has'} errors
-                </span>
-              )}
-              {totalItemErrors === 0 && filledItemCount > 0 && (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    color: '#027A48',
-                    background: '#ECFDF3',
-                    border: '1px solid #A7F3D0',
-                    borderRadius: '999px',
-                    padding: '2px 8px',
-                  }}
-                >
-                  <CheckCircle2 size={11} strokeWidth={2.5} aria-hidden />
-                  All items valid
-                </span>
-              )}
-            </div>
-
             <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '12px', color: '#667085', fontFamily: F }}>
                 Sub total: <strong style={{ color: '#101828' }}>{fmtRs(subtotalAll)}</strong>
@@ -1684,6 +2517,21 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
               </span>
             </div>
           </div>
+        )}
+
+        <UnsavedChangesDialog
+          open={Boolean(unsavedPrompt)}
+          onConfirm={confirmDiscardUnsaved}
+          onCancel={() => setUnsavedPrompt(null)}
+        />
+
+        {itemSelectTargetId && (
+          <SelectItemModal
+            open
+            openedAt={itemSelectOpenedAtRef.current}
+            onClose={() => setItemSelectTargetId(null)}
+            onConfirm={applyInventorySelection}
+          />
         )}
 
         {/* Edit / Add modal */}
@@ -1878,32 +2726,25 @@ const thStyle: React.CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
-const expandedDetailShellStyle: React.CSSProperties = {
-  border: '1px solid #E4E7EC',
-  borderRadius: '8px',
-  overflow: 'hidden',
-  background: '#FFFFFF',
-  boxShadow: '0 1px 2px rgba(16,24,40,0.04)',
-};
-
 const expandedDetailBodyStyle: React.CSSProperties = {
-  padding: '14px 16px',
-  background: '#FFFFFF',
+  padding: '11px 0 0',
+  background: 'transparent',
 };
 
 const expandedDetailGridStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(152px, 1fr))',
-  gap: '12px 24px',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))',
+  gap: '12px 16px',
 };
 
 const expandedDetailFooterStyle: React.CSSProperties = {
-  padding: '10px 16px',
-  borderTop: '1px solid #EEF1F5',
-  background: '#FAFBFC',
+  padding: '10px 0 0',
+  borderTop: 'none',
+  background: 'transparent',
   display: 'flex',
   gap: '8px',
   flexWrap: 'wrap',
+  alignItems: 'center',
 };
 
 const expandedFieldLabelStyle: React.CSSProperties = {
@@ -1935,4 +2776,102 @@ const viewMenuItemStyle: React.CSSProperties = {
   fontFamily: F,
   textAlign: 'left',
   cursor: 'pointer',
+};
+
+const savedBadgeStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '3px',
+  fontSize: '10px',
+  fontWeight: 700,
+  color: '#027A48',
+  background: '#ECFDF3',
+  border: '1px solid #A7F3D0',
+  borderRadius: '999px',
+  padding: '2px 7px',
+  flexShrink: 0,
+  fontFamily: F,
+};
+
+const saveShortcutHintStyle: React.CSSProperties = {
+  fontSize: '11px',
+  color: '#98A2B3',
+  fontFamily: F,
+  fontWeight: 500,
+  marginLeft: 'auto',
+};
+
+const saveToastBarStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '10px',
+  padding: '8px 16px',
+  background: '#F6FEF9',
+  borderBottom: '1px solid #A7F3D0',
+};
+
+const saveToastTextStyle: React.CSSProperties = {
+  flex: 1,
+  fontSize: '13px',
+  fontWeight: 500,
+  color: '#027A48',
+  fontFamily: F,
+  lineHeight: 1.4,
+};
+
+const saveToastDismissStyle: React.CSSProperties = {
+  width: '28px',
+  height: '28px',
+  border: 'none',
+  borderRadius: '6px',
+  background: 'transparent',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+  flexShrink: 0,
+};
+
+const interactionHintBarStyle: React.CSSProperties = {
+  padding: '6px 16px',
+  borderBottom: '1px solid #F2F4F7',
+  background: '#FAFBFC',
+  fontSize: '11px',
+  color: '#98A2B3',
+  fontFamily: F,
+  lineHeight: 1.45,
+  flexShrink: 0,
+};
+
+const draftRowBadgeStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  fontSize: '10px',
+  fontWeight: 700,
+  color: P2P_BRAND.primaryStrong,
+  background: P2P_BRAND.surface,
+  border: `1px solid ${P2P_BRAND.surfaceBorder}`,
+  borderRadius: '999px',
+  padding: '2px 8px',
+  flexShrink: 0,
+  fontFamily: F,
+  letterSpacing: '0.02em',
+  textTransform: 'uppercase',
+};
+
+const draftRowPromptStyle: React.CSSProperties = {
+  border: 'none',
+  background: 'transparent',
+  padding: '3px 0',
+  margin: 0,
+  fontSize: '13px',
+  fontWeight: 500,
+  fontStyle: 'italic',
+  color: '#667085',
+  fontFamily: F,
+  cursor: 'pointer',
+  textAlign: 'left',
+  minWidth: 0,
+  flex: 1,
+  transition: 'color 0.12s',
 };

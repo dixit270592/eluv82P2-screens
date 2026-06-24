@@ -1,4 +1,5 @@
 export { PRLineItemsSection, fmtRs } from './PRLineItemsSection';
+export { formatLineItemCurrency, LINE_ITEM_CURRENCY_PREFIX } from './lineItemCurrency';
 export { PRLineItemsSectionV2 } from './PRLineItemsSectionV2';
 export { PRLineItemsSectionV3 } from './PRLineItemsSectionV3';
 export { PRLineItemsWithLayoutPicker } from './PRLineItemsWithLayoutPicker';
@@ -7,6 +8,7 @@ export { LineItemSelectionBar } from './LineItemSelectionBar';
 export { DeleteConfirmPopover } from './DeleteConfirmPopover';
 export type { LineItemsLayoutVersion } from './LineItemsLayoutToggle';
 export type { PRLineItemsSectionHandle } from './PRLineItemsSection';
+export { SelectItemModal } from './SelectItemModal';
 export { LineItemFormModal } from './LineItemFormModal';
 export type { PRLineItem } from './types';
 export type { LineItemFormValues, LineItemValidationErrors } from './lineItemValidation';

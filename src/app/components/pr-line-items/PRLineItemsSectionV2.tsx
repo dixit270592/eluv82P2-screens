@@ -15,7 +15,6 @@ import {
   DollarSign,
   ExternalLink,
   AlertCircle,
-  Copy,
   X,
   CheckCircle2,
   Maximize2,
@@ -310,14 +309,6 @@ export const PRLineItemsSectionV2 = forwardRef<PRLineItemsSectionHandle, PRLineI
     const cancelInline = () => setInlineEdit(null);
     const isInline = (id: string, field: InlineEdit['field']) =>
       inlineEdit?.id === id && inlineEdit.field === field;
-
-    const duplicateItem = (item: PRLineItem) => {
-      const copy: PRLineItem = { ...item, id: Date.now().toString() };
-      const idx = items.findIndex((i) => i.id === item.id);
-      const next = [...items];
-      next.splice(idx + 1, 0, copy);
-      onChange(next);
-    };
 
     const getDetailValue = (item: PRLineItem, key: string): string => {
       switch (key) {
@@ -967,10 +958,6 @@ export const PRLineItemsSectionV2 = forwardRef<PRLineItemsSectionHandle, PRLineI
                   >
                     <Edit3 size={13} strokeWidth={2} aria-hidden />
                     Edit all fields
-                  </button>
-                  <button type="button" onClick={() => duplicateItem(detailItem)} style={secondaryButtonStyle}>
-                    <Copy size={13} strokeWidth={2} aria-hidden />
-                    Duplicate
                   </button>
                   {onOpenBudget && (
                     <button type="button" onClick={() => onOpenBudget(detailItem.id)} style={secondaryButtonStyle}>
