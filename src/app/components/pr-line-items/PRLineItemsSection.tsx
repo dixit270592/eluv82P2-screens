@@ -162,6 +162,42 @@ function formatRequiredBy(value?: string) {
   return value;
 }
 
+type LineItemRowSurfaceState = {
+  isSavedFlash: boolean;
+  isEditing: boolean;
+  errorCount: number;
+  isDraftRow: boolean;
+  isRowSelected: boolean;
+  isExpanded: boolean;
+  isHovered: boolean;
+};
+
+function getLineItemRowBackground(state: LineItemRowSurfaceState): string {
+  if (state.isSavedFlash) return '#F6FEF9';
+  if (state.isEditing || state.isDraftRow) return P2P_BRAND.surface;
+  if (state.errorCount > 0) return '#FFFBFA';
+  if (state.isRowSelected || state.isExpanded || state.isHovered) return '#FAFBFC';
+  return '#FFFFFF';
+}
+
+function getLineItemRowOutline(state: LineItemRowSurfaceState): string | undefined {
+  if (state.isEditing || state.isDraftRow) return `1px solid ${P2P_BRAND.surfaceBorder}`;
+  return undefined;
+}
+
+function getLineItemRowBorderBottom(
+  state: LineItemRowSurfaceState,
+  placement: 'summary' | 'detail',
+): string {
+  if (placement === 'detail') return '1px solid #E4E7EC';
+  const background = getLineItemRowBackground(state);
+  if (background === P2P_BRAND.surface) return `1px solid ${P2P_BRAND.surfaceBorder}`;
+  if (background === '#F6FEF9') return '1px solid #A7F3D0';
+  if (background === '#FFFBFA') return '1px solid #FECDCA';
+  if (state.isExpanded) return 'none';
+  return '1px solid #F2F4F7';
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineItemsSectionProps>(
   function PRLineItemsSection(
@@ -1169,29 +1205,29 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       const isEditing = rowDisplay.isEditing;
       const isSavedFlash = savedFlashIds.has(item.id);
       const isDraftRow = autoPopulateBlankRow && isTrailingBlankItem(items, item, index);
+      const rowSurface: LineItemRowSurfaceState = {
+        isSavedFlash,
+        isEditing,
+        errorCount,
+        isDraftRow,
+        isRowSelected: selectedIds.has(item.id),
+        isExpanded,
+        isHovered: false,
+      };
+      const rowBackground = getLineItemRowBackground(rowSurface);
 
       return (
         <div
           ref={(el) => { if (el) rowRefs.current.set(item.id, el); }}
           style={{
-            background: isSavedFlash
-              ? '#F6FEF9'
-              : isDraftRow && !isEditing
-                ? '#FAFBFC'
-                : isEditing
-                  ? P2P_BRAND.surface
-                  : selectedIds.has(item.id)
-                    ? '#FAFBFC'
-                    : '#FFFFFF',
+            background: rowBackground,
             border: isSavedFlash
               ? '1.5px solid #A7F3D0'
-              : isDraftRow && !isEditing
-                ? '1.5px dashed #D0D5DD'
-                : isEditing
-                  ? `1.5px solid ${P2P_BRAND.surfaceBorder}`
-                  : errorCount > 0
-                    ? '1.5px solid #FECDCA'
-                    : '1px solid #E4E7EC',
+              : isDraftRow || isEditing
+                ? `1.5px solid ${P2P_BRAND.surfaceBorder}`
+                : errorCount > 0
+                  ? '1.5px solid #FECDCA'
+                  : '1px solid #E4E7EC',
             borderRadius: '10px',
             marginBottom: '10px',
             overflow: 'hidden',
@@ -2002,6 +2038,16 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                     const isEditing = rowDisplay.isEditing;
 
                     const isSavedFlash = savedFlashIds.has(item.id);
+                    const rowSurface: LineItemRowSurfaceState = {
+                      isSavedFlash,
+                      isEditing,
+                      errorCount,
+                      isDraftRow,
+                      isRowSelected,
+                      isExpanded,
+                      isHovered: hoveredRow === item.id,
+                    };
+                    const rowBackground = getLineItemRowBackground(rowSurface);
 
                     return (
                       <Fragment key={item.id}>
@@ -2013,28 +2059,9 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                           exit={{ opacity: 0, x: -8 }}
                           transition={{ duration: 0.15 }}
                           style={{
-                            borderBottom: isExpanded ? 'none' : '1px solid #F2F4F7',
-                            background:
-                              isSavedFlash
-                                ? '#F6FEF9'
-                                : isEditing
-                                  ? P2P_BRAND.surface
-                                  : errorCount > 0
-                                    ? '#FFFBFA'
-                                    : isDraftRow
-                                      ? '#FAFBFC'
-                                      : isRowSelected
-                                        ? '#FAFBFC'
-                                        : isExpanded
-                                          ? '#FAFBFC'
-                                          : hoveredRow === item.id
-                                            ? '#FAFBFC'
-                                            : '#FFFFFF',
-                            outline: isEditing
-                              ? `1px solid ${P2P_BRAND.surfaceBorder}`
-                              : isDraftRow
-                                ? '1px dashed #D0D5DD'
-                                : undefined,
+                            borderBottom: getLineItemRowBorderBottom(rowSurface, 'summary'),
+                            background: rowBackground,
+                            outline: getLineItemRowOutline(rowSurface),
                             outlineOffset: isEditing || isDraftRow ? '-1px' : undefined,
                             boxShadow: isSavedFlash
                               ? 'inset 2px 0 0 #12B76A'
@@ -2304,18 +2331,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                                 ? {
                                     position: 'sticky',
                                     right: 0,
-                                    background:
-                                      isSavedFlash
-                                        ? '#F6FEF9'
-                                        : isEditing
-                                          ? P2P_BRAND.surface
-                                          : errorCount > 0
-                                            ? '#FFFBFA'
-                                            : isDraftRow
-                                              ? '#FAFBFC'
-                                              : isRowSelected || isExpanded || hoveredRow === item.id
-                                                ? '#FAFBFC'
-                                                : '#FFFFFF',
+                                    background: rowBackground,
                                     zIndex: 1,
                                   }
                                 : {}),
@@ -2459,7 +2475,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                                 colSpan={desktopColCount}
                                 style={{
                                   padding: isEditing ? '4px 14px 12px 58px' : '4px 14px 12px 58px',
-                                  borderBottom: '1px solid #E4E7EC',
+                                  borderBottom: getLineItemRowBorderBottom(rowSurface, 'detail'),
                                   background: '#FFFFFF',
                                 }}
                               >
