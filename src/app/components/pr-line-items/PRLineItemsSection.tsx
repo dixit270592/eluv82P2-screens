@@ -813,6 +813,17 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       }
       doToggleExpand(id);
     };
+
+    const ROW_TOGGLE_IGNORE_SELECTOR =
+      'button, input, a, select, textarea, [data-inline-cell], [role="checkbox"], [role="menu"]';
+
+    const handleSummaryRowClick = (itemId: string, e: MouseEvent<HTMLElement>) => {
+      if (disabled) return;
+      const target = e.target as HTMLElement;
+      if (target.closest(ROW_TOGGLE_IGNORE_SELECTOR)) return;
+      toggleExpand(itemId);
+    };
+
     const expandAll = () => setExpandedIds(new Set(filteredItems.map((i) => i.id)));
     const collapseAll = () => setExpandedIds(new Set());
 
@@ -1278,11 +1289,13 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
         >
           {/* Card header row */}
           <div
+            onClick={(e) => handleSummaryRowClick(item.id, e)}
             style={{
               padding: '12px 14px',
               display: 'flex',
               alignItems: 'flex-start',
               gap: '10px',
+              cursor: disabled ? 'default' : 'pointer',
             }}
           >
             <Checkbox
@@ -2056,6 +2069,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, x: -8 }}
                           transition={{ duration: 0.15 }}
+                          onClick={(e) => handleSummaryRowClick(item.id, e)}
                           style={{
                             borderBottom: getLineItemRowBorderBottom(rowSurface, 'summary'),
                             background: rowBackground,
@@ -2071,6 +2085,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                                     ? 'inset 2px 0 0 #E4E7EC'
                                     : 'none',
                             transition: 'background 0.1s, box-shadow 0.1s',
+                            cursor: disabled ? 'default' : 'pointer',
                           }}
                           onMouseEnter={() => setHoveredRow(item.id)}
                           onMouseLeave={() => setHoveredRow(null)}
