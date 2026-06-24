@@ -1668,49 +1668,6 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                 })}
             </div>
           </div>
-
-          <div style={{ ...expandedDetailFooterStyle, borderTop: '1px solid #EEF1F5', marginTop: '4px' }}>
-            {isV3 && (
-              <button
-                type="button"
-                onClick={() => handleRowEdit(item)}
-                disabled={disabled}
-                style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
-              >
-                <Edit3 size={12} strokeWidth={2} aria-hidden />
-                Edit fields
-              </button>
-            )}
-            {onOpenGL && (
-              <button
-                type="button"
-                onClick={() => onOpenGL(item.id)}
-                style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
-              >
-                GL distribution ({item.glAccountsCount || 1})
-              </button>
-            )}
-            {onOpenBudget && (
-              <button
-                type="button"
-                onClick={() => onOpenBudget(item.id)}
-                style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
-              >
-                <DollarSign size={12} color="#EF4444" strokeWidth={2} aria-hidden />
-                Check budget
-              </button>
-            )}
-            {onOpenBudgetReport && (
-              <button
-                type="button"
-                onClick={() => onOpenBudgetReport(item.id)}
-                style={{ ...secondaryButtonStyle, fontSize: '12px', height: '30px' }}
-              >
-                <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                Budget report
-              </button>
-            )}
-          </div>
         </>
       );
     };
