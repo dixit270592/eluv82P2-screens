@@ -254,13 +254,14 @@ export function LineItemInlineForm({
       case 'description':
         return (
           <div key={key} style={{ gridColumn: '1 / -1' }}>
-            {fieldLabel}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <input
                 {...commonProps}
                 value={values.description}
                 onChange={(e) => setField('description', e.target.value)}
                 placeholder="What are you purchasing?"
+                aria-label="Description"
+                aria-required={required || undefined}
                 style={{
                   ...inp('description'),
                   flex: 1,

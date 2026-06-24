@@ -25,6 +25,7 @@ import {
   MoreHorizontal,
   Loader2,
   CheckCircle2,
+  Layers,
 } from 'lucide-react';
 import {
   createDefaultPurchaseRequestOptions,
@@ -60,6 +61,8 @@ import { Checkbox } from '../ui/checkbox';
 import { LINE_ITEM_CHECKBOX_CLASS } from './lineItemSelectionStyles';
 import { LineItemSelectionBar } from './LineItemSelectionBar';
 import { formatLineItemCurrency, LINE_ITEM_CURRENCY_PREFIX } from './lineItemCurrency';
+import { TooltipContent, TooltipTrigger, TooltipProvider } from '../ui/tooltip';
+import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 
 // ─── Currency ───────────────────────────────────────────────────────────────
 export const fmtRs = formatLineItemCurrency;
@@ -592,6 +595,15 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       [autoPopulateBlankRow],
     );
 
+    const collapseExpandedRow = useCallback((itemId: string) => {
+      setExpandedIds((prev) => {
+        if (!prev.has(itemId)) return prev;
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+    }, []);
+
     const guardUnsavedDraft = useCallback(
       (itemId: string, action: () => void) => {
         const draft = draftValues[itemId];
@@ -615,16 +627,12 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       const { itemId, action } = unsavedPrompt;
       if (unsavedNewIds.has(itemId)) {
         onChange(finalizeItemsAfterRemoval(items.filter((i) => i.id !== itemId)));
-        setExpandedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(itemId);
-          return next;
-        });
       }
       exitEditMode(itemId);
+      collapseExpandedRow(itemId);
       setUnsavedPrompt(null);
       action();
-    }, [exitEditMode, finalizeItemsAfterRemoval, items, onChange, unsavedNewIds, unsavedPrompt]);
+    }, [collapseExpandedRow, exitEditMode, finalizeItemsAfterRemoval, items, onChange, unsavedNewIds, unsavedPrompt]);
 
     const focusOrCreateBlank = useCallback(() => {
       if (!autoPopulateBlankRow) {
@@ -856,11 +864,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
           ),
         );
         exitEditMode(itemId);
-        setExpandedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(itemId);
-          return next;
-        });
+        collapseExpandedRow(itemId);
         flashSavedRow(itemId);
         announceSaveSuccess(
           wasNew
@@ -886,13 +890,9 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       if (disabled) return;
       if (unsavedNewIds.has(itemId)) {
         onChange(finalizeItemsAfterRemoval(items.filter((i) => i.id !== itemId)));
-        setExpandedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(itemId);
-          return next;
-        });
       }
       exitEditMode(itemId);
+      collapseExpandedRow(itemId);
     };
 
     // Keyboard: Ctrl/Cmd+Enter saves the active inline edit
@@ -1016,6 +1016,44 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       }
       performRowEdit(item);
     };
+
+    const renderRowQuickActions = (item: PRLineItem) => (
+      <>
+        {onOpenGL && (
+          <RowActionIconTooltip
+            label={`GL distribution (${item.glAccountsCount || 1})`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenGL(item.id);
+            }}
+          >
+            <Layers size={14} color="#667085" strokeWidth={2} aria-hidden />
+          </RowActionIconTooltip>
+        )}
+        {onOpenBudget && (
+          <RowActionIconTooltip
+            label="Check budget"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenBudget(item.id);
+            }}
+          >
+            <DollarSign size={14} color="#EF4444" strokeWidth={2} aria-hidden />
+          </RowActionIconTooltip>
+        )}
+        {onOpenBudgetReport && (
+          <RowActionIconTooltip
+            label="Budget report"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenBudgetReport(item.id);
+            }}
+          >
+            <ExternalLink size={14} color="#667085" strokeWidth={2} aria-hidden />
+          </RowActionIconTooltip>
+        )}
+      </>
+    );
 
     // ── Shared inline cell ────────────────────────────────────────────────────
     const InlineCell = ({
@@ -1367,7 +1405,8 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
 
             <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
               {!isEditing && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {renderRowQuickActions(item)}
                   <button
                     type="button"
                     onClick={() => handleRowEdit(item)}
@@ -1682,6 +1721,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
 
     // ── Render ────────────────────────────────────────────────────────────────
     return (
+      <TooltipProvider delayDuration={200}>
       <div
         style={
           focusMode
@@ -2009,7 +2049,8 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                   <th style={{ ...thStyle, width: '104px' }}>Subtotal</th>
                   <th
                     style={{
-                      width: isV3Layout ? '96px' : '108px',
+                      width: isV3Layout ? undefined : '108px',
+                      minWidth: isV3Layout ? '148px' : undefined,
                       padding: '10px 14px',
                       ...(isV3Layout
                         ? { position: 'sticky', right: 0, background: '#F9FAFB', zIndex: 1 }
@@ -2342,23 +2383,27 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'flex-end',
-                                gap: '4px',
+                                gap: '6px',
+                                flexWrap: 'nowrap',
                                 opacity: isV3Layout || hoveredRow === item.id || isExpanded ? 1 : 0.6,
                                 transition: 'opacity 0.12s',
                               }}
                             >
                               {isV3Layout ? (
                                 !isEditing ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRowEdit(item)}
-                                    disabled={disabled}
-                                    title="Edit all fields"
-                                    aria-label="Edit all fields"
-                                    style={iconButtonStyle}
-                                  >
-                                    <Edit3 size={14} color="#667085" strokeWidth={2} />
-                                  </button>
+                                  <>
+                                    {renderRowQuickActions(item)}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRowEdit(item)}
+                                      disabled={disabled}
+                                      title="Edit all fields"
+                                      aria-label="Edit all fields"
+                                      style={iconButtonStyle}
+                                    >
+                                      <Edit3 size={14} color="#667085" strokeWidth={2} />
+                                    </button>
+                                  </>
                                 ) : null
                               ) : (
                                 <>
@@ -2567,9 +2612,43 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
           )}
         </AnimatePresence>
       </div>
+      </TooltipProvider>
     );
   },
 );
+
+function RowActionIconTooltip({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <TooltipPrimitive.Root>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={label}
+          style={rowQuickActionIconStyle}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        sideOffset={6}
+        className="z-[1300] border border-[#E4E7EC] bg-[#0F172A] px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-lg"
+        style={{ fontFamily: F }}
+      >
+        {label}
+      </TooltipContent>
+    </TooltipPrimitive.Root>
+  );
+}
 
 // ─── Empty State ─────────────────────────────────────────────────────────────
 function EmptyState({
@@ -2657,6 +2736,20 @@ const secondaryButtonStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: '6px',
+};
+
+const rowQuickActionIconStyle: React.CSSProperties = {
+  width: '28px',
+  height: '28px',
+  padding: 0,
+  background: '#FFFFFF',
+  border: '1px solid #D0D5DD',
+  borderRadius: '6px',
+  cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flexShrink: 0,
 };
 
 const iconButtonStyle: React.CSSProperties = {

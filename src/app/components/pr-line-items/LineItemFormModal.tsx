@@ -316,12 +316,13 @@ export function LineItemFormModal({
       case 'description':
         return (
           <div key={key} style={{ gridColumn: '1 / -1' }}>
-            {fieldLabel}
             <input
               {...commonProps}
               value={form.description}
               onChange={(e) => setField('description', e.target.value)}
               placeholder="What are you purchasing?"
+              aria-label="Description"
+              aria-required={required || undefined}
               style={{ ...inp('description'), height: '42px', fontSize: '14px', fontWeight: 500 }}
             />
             <FieldError fieldKey="description" />
