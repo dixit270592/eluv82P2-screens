@@ -14,7 +14,6 @@ import {
   Plus,
   ChevronDown,
   ChevronRight,
-  Trash2,
   Edit3,
   DollarSign,
   ExternalLink,
@@ -46,8 +45,6 @@ import type { PRLineItem } from './types';
 import { Checkbox } from '../ui/checkbox';
 import { LINE_ITEM_CHECKBOX_CLASS } from './lineItemSelectionStyles';
 import { LineItemSelectionBar } from './LineItemSelectionBar';
-import { DeleteConfirmPopover } from './DeleteConfirmPopover';
-
 // ─── Currency ───────────────────────────────────────────────────────────────
 export const fmtRs = (n: number) =>
   `Rs. ${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -442,52 +439,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
       onChange(next);
     };
 
-    const requestRowDelete = (id: string) => {
-      if (disabled) return;
-      setDeleteConfirm({ ids: [id], source: 'row' });
-      setOpenActionMenuId(null);
-    };
-
-    const isRowDeletePending = (id: string) =>
-      deleteConfirm?.source === 'row' &&
-      deleteConfirm.ids.length === 1 &&
-      deleteConfirm.ids[0] === id;
-
     const isBulkDeletePending = deleteConfirm?.source === 'bulk';
-
-    const renderRowDeleteAction = (item: PRLineItem, index: number) => {
-      if (autoPopulateBlankRow && isTrailingBlankItem(items, item, index)) return null;
-
-      const pending = isRowDeletePending(item.id);
-      const placement = index >= filteredItems.length - 2 ? 'above' : 'below';
-
-      return (
-        <div
-          style={{ position: 'relative', display: 'inline-flex' }}
-          data-delete-confirm={pending ? true : undefined}
-        >
-          <button
-            type="button"
-            onClick={() => requestRowDelete(item.id)}
-            disabled={disabled}
-            title="Remove item"
-            style={iconButtonStyle}
-          >
-            <Trash2 size={14} color="#F04438" strokeWidth={2} />
-          </button>
-          <AnimatePresence>
-            {pending && (
-              <DeleteConfirmPopover
-                count={1}
-                placement={placement}
-                onConfirm={confirmDelete}
-                onCancel={cancelDelete}
-              />
-            )}
-          </AnimatePresence>
-        </div>
-      );
-    };
 
     const confirmDelete = () => {
       if (!deleteConfirm?.ids.length || disabled) return;
@@ -629,7 +581,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
             border: errorCount > 0 ? '1.5px solid #FECDCA' : selectedIds.has(item.id) ? '1px solid #E4E7EC' : '1px solid #E4E7EC',
             borderRadius: '10px',
             marginBottom: '10px',
-            overflow: isRowDeletePending(item.id) ? 'visible' : 'hidden',
+            overflow: 'hidden',
           }}
         >
           {/* Card header row */}
@@ -722,7 +674,6 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                 >
                   <Edit3 size={14} color="#667085" strokeWidth={2} />
                 </button>
-                {renderRowDeleteAction(item, index)}
               </div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#101828', fontFamily: F }}>
                 {fmtRs(item.subtotal)}
@@ -1387,7 +1338,6 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                           <td
                             style={{
                               padding: '12px 14px',
-                              overflow: isRowDeletePending(item.id) ? 'visible' : undefined,
                               ...(isV3Layout
                                 ? {
                                     position: 'sticky',
@@ -1400,7 +1350,7 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                                           : isRowSelected || isExpanded || hoveredRow === item.id
                                             ? '#FAFBFC'
                                             : '#FFFFFF',
-                                    zIndex: isRowDeletePending(item.id) ? 4 : 1,
+                                    zIndex: 1,
                                   }
                                 : {}),
                             }}
@@ -1426,7 +1376,6 @@ export const PRLineItemsSection = forwardRef<PRLineItemsSectionHandle, PRLineIte
                                   >
                                     <Edit3 size={14} color="#667085" strokeWidth={2} />
                                   </button>
-                                  {renderRowDeleteAction(item, items.findIndex((i) => i.id === item.id))}
                                 </>
                               ) : (
                                 <>
