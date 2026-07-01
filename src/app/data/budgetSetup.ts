@@ -30,7 +30,9 @@ export const BUDGET_PERIOD_OPTIONS: { value: BudgetPeriod; label: string }[] = [
 
 export const GL_ACCOUNT_OPTIONS = [
   'DEP 2:TEST ACC:NEWSEGMENT:Test Sales',
+  'DEP 2:TEST ACC:Name:Test Sales',
   'DEP 1:HR Account:NEWSEGMENT:Test Sales',
+  'DEP 1:HR Account:Name:Test Sales',
   'DEP 1:Bank:Name:Test Sales',
   'IT:TEST ACC:NEWSEGMENT:Test Sales',
 ];

@@ -18,7 +18,10 @@ import {
   type BudgetLine,
   type BudgetPeriod,
 } from '../../data/budgetSetup';
+import { BUDGET_IMPORT_CONFIG } from '../../data/importWizardConfig';
+import type { ValidationResult } from '../../types/globalImport';
 import { FieldLabelWithHelp, SetupHelpIcon } from './SetupHelpIcon';
+import { ImportWizard } from './import';
 import { P2P_BRAND } from '../../tokens/brand';
 import { UI_FONT_STACK as F } from '../../tokens/typography';
 
@@ -43,6 +46,7 @@ export function BudgetConfigPanel({
 }: BudgetConfigPanelProps) {
   const [activeTab, setActiveTab] = useState<BudgetTab>('gl');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
+  const [importOpen, setImportOpen] = useState(false);
 
   const monthColumns = useMemo(
     () => getMonthColumns(budget.startDate, budget.endDate),
@@ -51,6 +55,10 @@ export function BudgetConfigPanel({
 
   const lines = activeTab === 'gl' ? budget.glLines : budget.projectLines;
   const accountOptions = activeTab === 'gl' ? GL_ACCOUNT_OPTIONS : PROJECT_ACCOUNT_OPTIONS;
+  const availableAccountOptions = useMemo(
+    () => accountOptions.filter((account) => !lines.some((line) => line.account === account)),
+    [accountOptions, lines],
+  );
   const accountLabel = activeTab === 'gl' ? 'Select GL Account' : 'Select Project Account';
   const accountColumnLabel = activeTab === 'gl' ? 'Gl Accounts' : 'Project Accounts';
 
@@ -68,6 +76,38 @@ export function BudgetConfigPanel({
       endDate: nextEnd,
       glLines: syncLineAmounts(budget.glLines, columns),
       projectLines: syncLineAmounts(budget.projectLines, columns),
+    });
+  };
+
+  const handleImportSuccess = (validation: ValidationResult) => {
+    const targetKey = activeTab === 'gl' ? 'glLines' : 'projectLines';
+    const existing = budget[targetKey];
+    const importedLines: BudgetLine[] = validation.rows
+      .filter((row) => row.status !== 'invalid')
+      .map((row) => {
+        const account = String(
+          row.data.GLAccount ?? row.data.ProjectAccount ?? row.data.FullAccountName ?? '',
+        );
+        const description = String(row.data.Description ?? account);
+        const amounts = Object.fromEntries(
+          monthColumns.map((column, index) => {
+            const periodKey = `Period${index + 1}`;
+            return [column.key, Number(row.data[periodKey] ?? 0)];
+          }),
+        );
+        return {
+          id: `line-${crypto.randomUUID()}`,
+          account,
+          description,
+          amounts,
+        };
+      })
+      .filter((line) => line.account && !existing.some((entry) => entry.account === line.account));
+
+    if (importedLines.length === 0) return;
+    onChange({
+      ...budget,
+      [targetKey]: [...existing, ...importedLines],
     });
   };
 
@@ -124,41 +164,46 @@ export function BudgetConfigPanel({
       }}
     >
       <div style={{ padding: '20px 24px 0', borderBottom: '1px solid #EEF1F5' }}>
-        <button
-          type="button"
-          onClick={onBack}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            marginBottom: '14px',
-            padding: 0,
-            border: 'none',
-            background: 'transparent',
-            fontSize: '13px',
-            fontWeight: 600,
-            color: P2P_BRAND.primaryStrong,
-            cursor: 'pointer',
-            fontFamily: F,
-          }}
-        >
-          <ArrowLeft size={16} aria-hidden />
-          Back to budgets
-        </button>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
-          <h2
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '18px' }}>
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="Back to budgets"
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
+              width: 'auto',
+              height: '28px',
               margin: 0,
-              fontSize: '18px',
-              fontWeight: 600,
-              color: '#0F172A',
-              letterSpacing: '-0.02em',
+              marginRight: '4px',
+              padding: 0,
+              border: 'none',
+              borderRadius: '8px',
+              background: 'transparent',
+              color: P2P_BRAND.primaryStrong,
+              cursor: 'pointer',
+              flexShrink: 0,
+              fontFamily: F,
             }}
           >
-            {isNew ? 'Add Budget Configuration' : 'Modify Budget Configuration'}
-          </h2>
-          <SetupHelpIcon label="Configure the fiscal period, then allocate monthly amounts on the GL Account or Project Account tab." />
+            <ArrowLeft size={18} strokeWidth={2.25} aria-hidden />
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: '18px',
+                fontWeight: 600,
+                color: '#0F172A',
+                letterSpacing: '-0.02em',
+                lineHeight: 1.2,
+              }}
+            >
+              {isNew ? 'Add Budget Configuration' : 'Modify Budget Configuration'}
+            </h2>
+            <SetupHelpIcon label="Configure the fiscal period, then allocate monthly amounts on the GL Account or Project Account tab." />
+          </div>
         </div>
 
         <div
@@ -290,37 +335,10 @@ export function BudgetConfigPanel({
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          flexWrap: 'wrap',
+          flexWrap: 'nowrap',
         }}
       >
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-          <button
-            type="button"
-            aria-label="Filter"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '36px',
-              height: '36px',
-              border: '1px solid #E4E7EC',
-              borderRadius: '8px',
-              background: '#FFFFFF',
-              color: '#64748B',
-              cursor: 'pointer',
-              flexShrink: 0,
-            }}
-          >
-            <Filter size={15} aria-hidden />
-          </button>
-          <SetupHelpIcon label="Filter rows by account name or amount threshold." />
-        </div>
-
-        <div style={{ flex: '1 1 220px', minWidth: '200px', maxWidth: '420px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748B' }}>{accountLabel}</span>
-            <SetupHelpIcon label="Choose an account, then click Add account to include it in the budget grid below." />
-          </div>
+        <div style={{ flex: '1 1 280px', minWidth: '220px', maxWidth: '420px' }}>
           <Select
             value={selectedAccount || undefined}
             onValueChange={setSelectedAccount}
@@ -332,42 +350,75 @@ export function BudgetConfigPanel({
               <SelectValue placeholder={accountLabel} />
             </SelectTrigger>
             <SelectContent>
-              {accountOptions.map((account) => (
-                <SelectItem key={account} value={account} className="text-[13px]">
-                  {account}
+              {availableAccountOptions.length === 0 ? (
+                <SelectItem value="__none__" disabled className="text-[13px]">
+                  All accounts added
                 </SelectItem>
-              ))}
+              ) : (
+                availableAccountOptions.map((account) => (
+                  <SelectItem key={account} value={account} className="text-[13px]">
+                    {account}
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
         </div>
 
-        <button
-          type="button"
-          onClick={addLine}
-          disabled={!selectedAccount}
-          style={{
-            ...outlineButtonStyle,
-            opacity: selectedAccount ? 1 : 0.55,
-            cursor: selectedAccount ? 'pointer' : 'not-allowed',
-          }}
-        >
-          Add account
-        </button>
+        <div style={{ flex: 1, minWidth: '16px' }} aria-hidden />
 
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-          <button type="button" style={outlineButtonStyle}>
-            <Pencil size={14} aria-hidden />
-            Auto Fill
-          </button>
-          <SetupHelpIcon label="Copy a value or pattern across selected months and accounts." />
-        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <button
+              type="button"
+              aria-label="Filter"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '36px',
+                height: '36px',
+                border: '1px solid #E4E7EC',
+                borderRadius: '8px',
+                background: '#FFFFFF',
+                color: '#64748B',
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              <Filter size={15} aria-hidden />
+            </button>
+            <SetupHelpIcon label="Filter rows by account name or amount threshold." />
+          </div>
 
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-          <button type="button" style={outlineButtonStyle}>
-            <Upload size={14} aria-hidden />
-            Import Budgets
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <button type="button" style={outlineButtonStyle}>
+              <Pencil size={14} aria-hidden />
+              Auto Fill
+            </button>
+            <SetupHelpIcon label="Copy a value or pattern across selected months and accounts." />
+          </div>
+
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <button type="button" onClick={() => setImportOpen(true)} style={outlineButtonStyle}>
+              <Upload size={14} aria-hidden />
+              Import Budgets
+            </button>
+            <SetupHelpIcon label="Upload a CSV file to populate account rows and monthly amounts." />
+          </div>
+
+          <button
+            type="button"
+            onClick={addLine}
+            disabled={!selectedAccount}
+            style={{
+              ...outlineButtonStyle,
+              opacity: selectedAccount ? 1 : 0.55,
+              cursor: selectedAccount ? 'pointer' : 'not-allowed',
+            }}
+          >
+            Add Account
           </button>
-          <SetupHelpIcon label="Upload a CSV file to populate account rows and monthly amounts." />
         </div>
       </div>
 
@@ -481,6 +532,14 @@ export function BudgetConfigPanel({
           Save
         </button>
       </div>
+
+      <ImportWizard
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        config={BUDGET_IMPORT_CONFIG}
+        context={{ budget, importBudgetType: activeTab === 'gl' ? 0 : 1 }}
+        onImportSuccess={handleImportSuccess}
+      />
     </section>
   );
 }

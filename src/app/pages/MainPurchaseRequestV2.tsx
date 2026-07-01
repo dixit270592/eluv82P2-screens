@@ -166,6 +166,7 @@ export function MainPurchaseRequestV2() {
   const lineItemsSectionRef = useRef<PRLineItemsSectionHandle>(null);
   const [glDistributionRow, setGLDistributionRow] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ type: 'cancel' | 'recall' | null; show: boolean }>({ type: null, show: false });
+  const [recallNote, setRecallNote] = useState('');
   const [headerEditMode, setHeaderEditMode] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(true);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -320,21 +321,33 @@ export function MainPurchaseRequestV2() {
     setConfirmDialog({ type: 'cancel', show: true });
   };
 
+  const closeConfirmDialog = () => {
+    setConfirmDialog({ type: null, show: false });
+    setRecallNote('');
+  };
+
   const handleRecall = () => {
+    setRecallNote('');
     setConfirmDialog({ type: 'recall', show: true });
   };
 
   const confirmCancel = () => {
     addActivity('Request cancelled', 'Purchase request cancelled', 'data_entry', 'error');
-    setConfirmDialog({ type: null, show: false });
+    closeConfirmDialog();
     showToast('Request cancelled', 'info');
     navigate('/');
   };
 
   const confirmRecall = () => {
     setStatus('recalled');
-    addActivity('Recalled from approval', 'Purchase request recalled from approval', 'approvals', 'neutral');
-    setConfirmDialog({ type: null, show: false });
+    const trimmedNote = recallNote.trim();
+    addActivity(
+      'Recalled from approval',
+      trimmedNote ? `Recall note: ${trimmedNote}` : 'Purchase request recalled from approval',
+      'approvals',
+      'neutral',
+    );
+    closeConfirmDialog();
     showToast('Request recalled', 'info');
   };
 
@@ -1548,7 +1561,7 @@ export function MainPurchaseRequestV2() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               zIndex: 300, backdropFilter: 'blur(2px)',
             }}
-            onClick={(e) => { if (e.target === e.currentTarget) setConfirmDialog({ type: null, show: false }); }}
+            onClick={(e) => { if (e.target === e.currentTarget) closeConfirmDialog(); }}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.97, y: 10 }}
@@ -1562,7 +1575,7 @@ export function MainPurchaseRequestV2() {
                 padding: '24px',
               }}
             >
-              <div style={{ marginBottom: '16px' }}>
+              <div style={{ marginBottom: confirmDialog.type === 'recall' ? '12px' : '16px' }}>
                 <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#101828', fontFamily: F, marginBottom: '8px' }}>
                   {confirmDialog.type === 'cancel' ? 'Cancel Request' : 'Recall Request'}
                 </h3>
@@ -1572,9 +1585,46 @@ export function MainPurchaseRequestV2() {
                     : 'Are you sure you want to recall this request? It will be moved back to draft status.'}
                 </p>
               </div>
+              {confirmDialog.type === 'recall' && (
+                <div style={{ marginBottom: '16px' }}>
+                  <label
+                    htmlFor="recall-note"
+                    style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#344054', fontFamily: F, marginBottom: '6px' }}
+                  >
+                    Note/Comment
+                  </label>
+                  <textarea
+                    id="recall-note"
+                    value={recallNote}
+                    onChange={(e) => setRecallNote(e.target.value)}
+                    placeholder="Explain why you are recalling this request or add instructions for the recipient…"
+                    rows={3}
+                    maxLength={500}
+                    style={{
+                      width: '100%',
+                      resize: 'vertical',
+                      minHeight: 72,
+                      padding: '10px 12px',
+                      border: '1px solid #E4E7EC',
+                      borderRadius: 6,
+                      fontSize: '13px',
+                      fontFamily: F,
+                      color: '#101828',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      lineHeight: 1.5,
+                    }}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = '#D97706'; }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = '#E4E7EC'; }}
+                  />
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#98A2B3', fontFamily: F, textAlign: 'right' }}>
+                    {recallNote.length}/500
+                  </p>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                 <button
-                  onClick={() => setConfirmDialog({ type: null, show: false })}
+                  onClick={closeConfirmDialog}
                   style={{ height: '36px', padding: '0 18px', background: '#FFFFFF', border: '1.5px solid #D0D5DD', borderRadius: '5px', fontSize: '13px', fontWeight: 600, color: '#344054', fontFamily: F, cursor: 'pointer', transition: 'background 0.15s' }}
                   onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = '#F9FAFB')}
                   onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = '#FFFFFF')}

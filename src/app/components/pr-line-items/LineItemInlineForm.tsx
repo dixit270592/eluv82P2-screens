@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, AlertCircle, Search } from 'lucide-react';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
+import {
   createDefaultPurchaseRequestOptions,
   type PurchaseRequestOptionsState,
 } from '../../data/purchaseRequestOptions';
@@ -432,25 +439,59 @@ export function LineItemInlineForm({
             <FieldError fieldKey="requiredBy" />
           </div>
         );
-      case 'glAccount':
+      case 'glAccount': {
+        const glAccountValue = LINE_ITEM_GL_ACCOUNTS.includes(values.glAccount)
+          ? values.glAccount
+          : LINE_ITEM_GL_ACCOUNTS[0];
         return (
           <div key={key}>
             {fieldLabel}
-            <SelectWrap>
-              <select
-                {...commonProps}
-                value={values.glAccount}
-                onChange={(e) => setField('glAccount', e.target.value)}
-                style={sel('glAccount')}
+            <Select
+              value={glAccountValue}
+              onValueChange={(value) => setField('glAccount', value)}
+            >
+              <SelectTrigger
+                id={fieldId}
+                data-field={key}
+                aria-invalid={showFieldError(key) || undefined}
+                aria-describedby={
+                  showFieldError(key) ? `li-inline-err-${itemId}-${key}` : undefined
+                }
+                onFocus={() => setFocused(key)}
+                onBlur={() => {
+                  setFocused(null);
+                  onFieldBlur?.(key);
+                }}
+                className="shadow-none focus-visible:ring-0 data-[state=open]:ring-0"
+                style={{
+                  width: '100%',
+                  height: '36px',
+                  border: `1px solid ${fieldBorder('glAccount')}`,
+                  borderRadius: '6px',
+                  padding: '0 12px',
+                  fontSize: '13px',
+                  color: '#101828',
+                  fontFamily: F,
+                  background: '#FFFFFF',
+                  boxSizing: 'border-box',
+                  boxShadow: fieldShadow('glAccount'),
+                  cursor: 'pointer',
+                }}
               >
+                <SelectValue placeholder="Select GL account…" />
+              </SelectTrigger>
+              <SelectContent position="popper" sideOffset={4} className="z-[200]">
                 {LINE_ITEM_GL_ACCOUNTS.map((g) => (
-                  <option key={g}>{g}</option>
+                  <SelectItem key={g} value={g} className="text-[13px]" style={{ fontFamily: F }}>
+                    {g}
+                  </SelectItem>
                 ))}
-              </select>
-            </SelectWrap>
+              </SelectContent>
+            </Select>
             <FieldError fieldKey="glAccount" />
           </div>
         );
+      }
       case 'projectAccount':
         return (
           <div key={key}>

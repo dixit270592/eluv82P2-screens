@@ -46,6 +46,11 @@ import {
 } from '../../data/accountSetup';
 import { P2P_BRAND } from '../../tokens/brand';
 import { UI_FONT_STACK as F } from '../../tokens/typography';
+import { ImportWizard } from '../../components/setup/import';
+import {
+  ACCOUNT_DATA_IMPORT_CONFIG,
+  ACCOUNT_SEGMENT_IMPORT_CONFIG,
+} from '../../data/importWizardConfig';
 
 type TabId = 'segment-config' | 'segment-data' | 'account-data' | 'split-gl';
 
@@ -94,6 +99,8 @@ export function AccountSetup() {
   const [deleteSplitId, setDeleteSplitId] = useState<string | null>(null);
   const [expandedSplitIds, setExpandedSplitIds] = useState<Set<string>>(() => new Set(['pgs-1']));
   const [configSaved, setConfigSaved] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importScope, setImportScope] = useState<'segment' | 'account'>('segment');
 
   const segmentTypes = useMemo(() => getSegmentTypeOptions(segments), [segments]);
   const departments = useMemo(() => getDepartmentOptions(segmentData), [segmentData]);
@@ -663,7 +670,14 @@ export function AccountSetup() {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-                  <button type="button" style={outlineButtonStyle}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportScope('segment');
+                      setImportOpen(true);
+                    }}
+                    style={outlineButtonStyle}
+                  >
                     <Upload size={15} strokeWidth={2} aria-hidden />
                     Import
                   </button>
@@ -846,7 +860,14 @@ export function AccountSetup() {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-                  <button type="button" style={outlineButtonStyle}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportScope('account');
+                      setImportOpen(true);
+                    }}
+                    style={outlineButtonStyle}
+                  >
                     <Upload size={15} strokeWidth={2} aria-hidden />
                     Import
                   </button>
@@ -1263,6 +1284,12 @@ export function AccountSetup() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ImportWizard
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        config={importScope === 'segment' ? ACCOUNT_SEGMENT_IMPORT_CONFIG : ACCOUNT_DATA_IMPORT_CONFIG}
+      />
     </div>
   );
 }

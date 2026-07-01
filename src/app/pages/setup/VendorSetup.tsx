@@ -27,6 +27,8 @@ import {
 } from '../../data/vendorSetup';
 import { P2P_BRAND } from '../../tokens/brand';
 import { UI_FONT_STACK as F } from '../../tokens/typography';
+import { ImportWizard } from '../../components/setup/import';
+import { VENDOR_IMPORT_CONFIG } from '../../data/importWizardConfig';
 
 type DeleteMode = { type: 'bulk'; count: number };
 
@@ -44,6 +46,7 @@ export function VendorSetup() {
   const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
   const [pendingClose, setPendingClose] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const savedVendor = useMemo(
     () => vendors.find((v) => v.id === selectedId) ?? null,
@@ -148,7 +151,7 @@ export function VendorSetup() {
   };
 
   const handleImportVendor = () => {
-    setActionNotice('Import vendor will open a file picker when the integration is connected.');
+    setImportOpen(true);
   };
 
   const handleAiInvoice = () => {
@@ -353,6 +356,12 @@ export function VendorSetup() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ImportWizard
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        config={VENDOR_IMPORT_CONFIG}
+      />
     </div>
   );
 }
