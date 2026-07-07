@@ -3735,6 +3735,9 @@
   }
 
   .app-report-config-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     padding: 10px 14px;
     border: none;
     background: transparent;
@@ -3758,6 +3761,111 @@
     color: #1a7a6e;
     font-weight: 600;
     border-bottom-color: #1fa97a;
+  }
+
+  .app-report-config-tab--scheduled:not(.app-report-config-tab--active) {
+    color: #344054;
+  }
+
+  .app-report-config-tab__badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #059669;
+    background: #ecfdf5;
+    line-height: 1.4;
+  }
+
+  .app-report-config-schedule-hint {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 12px 14px;
+    border: 1px solid #eaecf0;
+    border-radius: 10px;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  }
+
+  .app-report-config-schedule-hint__main {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .app-report-config-schedule-hint__icon-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: #ecfdf5;
+    color: #1fa97a;
+    flex-shrink: 0;
+  }
+
+  .app-report-config-schedule-hint__copy {
+    min-width: 0;
+  }
+
+  .app-report-config-schedule-hint__title {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #101828;
+    line-height: 1.3;
+  }
+
+  .app-report-config-schedule-hint__desc {
+    margin: 3px 0 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #667085;
+  }
+
+  .app-report-config-schedule-hint__action {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid #1fa97a;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #1a7a6e;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .app-report-config-schedule-hint__action:hover {
+    background: #ecfdf5;
+    border-color: #0e8c6e;
+    color: #0e8c6e;
+  }
+
+  .app-report-config-schedule-hint__action:focus-visible {
+    outline: 2px solid #1fa97a;
+    outline-offset: 2px;
+  }
+
+  .app-report-header-btn--outline:hover {
+    background: #ecfdf5;
   }
 
   .app-report-config-tab:focus-visible {
@@ -4160,6 +4268,16 @@
 
     .app-report-create-flow__config .app-report-config-form {
       padding: 16px;
+    }
+
+    .app-report-config-schedule-hint {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .app-report-config-schedule-hint__action {
+      justify-content: center;
+      width: 100%;
     }
 
     .app-report-create-footer {

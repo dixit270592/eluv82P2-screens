@@ -450,7 +450,7 @@ export function CreateReportFlow({
 
 
 
-  const title = initialRunConfig ? "Run Again" : "Create Report";
+  const title = initialRunConfig ? "Run Again" : scheduleEnabled ? "Schedule Report" : "Create Report";
 
 
 

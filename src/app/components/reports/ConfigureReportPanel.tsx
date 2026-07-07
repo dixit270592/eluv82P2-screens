@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { CalendarClock, ChevronRight } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import type { ReportTemplate } from "../../data/reportTemplates";
 import {
@@ -42,7 +43,7 @@ const inputFocusHandlers = {
 const CONFIG_TABS: { id: ConfigureTab; label: string }[] = [
   { id: "basic", label: "Basic Filters" },
   { id: "advanced", label: "Advanced Filters" },
-  { id: "delivery", label: "Delivery Options" },
+  { id: "delivery", label: "Delivery & Schedule" },
 ];
 
 function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
@@ -225,6 +226,12 @@ export const ConfigureReportPanel = forwardRef<
     setDepartments((prev) => (prev.includes(dept) ? prev.filter((d) => d !== dept) : [...prev, dept]));
   };
 
+  const enableSchedule = () => {
+    setScheduleEnabled(true);
+    onScheduleEnabledChange?.(true);
+    setActiveTab("delivery");
+  };
+
   const buildConfig = (): ReportRunConfig => ({
     reportName: reportName.trim() || template.name,
     templateId: template.id,
@@ -363,7 +370,9 @@ export const ConfigureReportPanel = forwardRef<
             aria-selected={activeTab === tab.id}
             aria-controls={`report-config-panel-${tab.id}`}
             tabIndex={activeTab === tab.id ? 0 : -1}
-            className={`app-report-config-tab${activeTab === tab.id ? " app-report-config-tab--active" : ""}`}
+            className={`app-report-config-tab${activeTab === tab.id ? " app-report-config-tab--active" : ""}${
+              tab.id === "delivery" && scheduleEnabled ? " app-report-config-tab--scheduled" : ""
+            }`}
             onClick={() => setActiveTab(tab.id)}
             onKeyDown={(e) => {
               const idx = CONFIG_TABS.findIndex((t) => t.id === tab.id);
@@ -377,9 +386,32 @@ export const ConfigureReportPanel = forwardRef<
             }}
           >
             {tab.label}
+            {tab.id === "delivery" && scheduleEnabled && (
+              <span className="app-report-config-tab__badge">Scheduled</span>
+            )}
           </button>
         ))}
       </div>
+
+      {!scheduleEnabled && activeTab !== "delivery" && (
+        <div className="app-report-config-schedule-hint">
+          <div className="app-report-config-schedule-hint__main">
+            <span className="app-report-config-schedule-hint__icon-wrap" aria-hidden>
+              <CalendarClock size={16} strokeWidth={2} />
+            </span>
+            <div className="app-report-config-schedule-hint__copy">
+              <span className="app-report-config-schedule-hint__title">Schedule recurring delivery</span>
+              <p className="app-report-config-schedule-hint__desc">
+                Automate this report on a daily, weekly, or monthly cadence.
+              </p>
+            </div>
+          </div>
+          <button type="button" className="app-report-config-schedule-hint__action" onClick={enableSchedule}>
+            Set up
+            <ChevronRight size={14} aria-hidden />
+          </button>
+        </div>
+      )}
 
       <div
         className="app-report-config-tab-panel"
