@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -10,7 +10,7 @@ import { ReportCenterNav, type LibraryCollection, type ReportCenterSection } fro
 import { ReportLibrarySection } from "../components/reports/ReportLibrarySection";
 import { ReportsInsightsSection } from "../components/reports/ReportsInsightsSection";
 import { ScheduleEditDrawer } from "../components/reports/ScheduleEditDrawer";
-import { ReportsProvider, useReports } from "../context/ReportsContext";
+import { useReports } from "../context/ReportsContext";
 import type { ReportTemplate } from "../data/reportTemplates";
 import type { ReportHistoryItem } from "../data/reportHistory";
 import type { ReportRunConfig } from "../components/reports/reportGenerationTypes";
@@ -18,22 +18,9 @@ import { findTemplateById, getReportRunConfig } from "../utils/reportRunConfigUt
 import { computeCollectionCounts } from "../utils/reportLibraryFilters";
 import { buildReportCenterPath, parseReportCenterPath } from "../utils/reportCenterRoutes";
 import { UI_FONT_STACK as F } from "../tokens/typography";
-import { reportPageBg, reportFont, reportPageTitleStyle, reportPageSubtitleStyle } from "../components/reports/reportUiStyles";
-
-const ScheduledReportsSection = lazy(() =>
-  import("../components/reports/ScheduledReportsSection").then((m) => ({ default: m.ScheduledReportsSection })),
-);
-const ReportTemplatesSection = lazy(() =>
-  import("../components/reports/ReportTemplatesSection").then((m) => ({ default: m.ReportTemplatesSection })),
-);
-
-function TabFallback() {
-  return (
-    <div style={{ padding: "16px 0", fontSize: "12px", color: "#667085", fontFamily: reportFont }}>
-      Loading…
-    </div>
-  );
-}
+import { reportPageBg, reportFont, reportPageTitleStyle } from "../components/reports/reportUiStyles";
+import { ScheduledReportsSection } from "../components/reports/ScheduledReportsSection";
+import { ReportTemplatesSection } from "../components/reports/ReportTemplatesSection";
 
 const sectionTitles: Record<ReportCenterSection, { title: string; subtitle: string }> = {
   library: {
@@ -163,17 +150,26 @@ function ReportsPageInner() {
 
   const handleRunAgain = useCallback((report: ReportHistoryItem) => {
     const config = getReportRunConfig(report);
-    if (!config) {
-      toast.error("No saved configuration for this report");
+    if (config) {
+      const template = findTemplateById(config.templateId, templateGroups);
+      if (!template) {
+        toast.error("Original template no longer available");
+        return;
+      }
+      setInitialTemplate(template);
+      setInitialRunConfig({ ...config, scheduleEnabled: false });
+      setTemplateScheduleMode(false);
+      setTemplateDrawerOpen(true);
       return;
     }
-    const template = findTemplateById(config.templateId, templateGroups);
-    if (!template) {
-      toast.error("Original template no longer available");
-      return;
-    }
-    setInitialTemplate(template);
-    setInitialRunConfig({ ...config, scheduleEnabled: false });
+    // No saved runConfig — try to match a template by report type name so the
+    // user can re-configure from a clean form (covers demo reports and older history).
+    const allTemplates = templateGroups.flatMap((g) => g.templates);
+    const matched = allTemplates.find(
+      (t) => t.name.toLowerCase() === report.type.toLowerCase(),
+    ) ?? allTemplates[0] ?? null;
+    setInitialTemplate(matched);
+    setInitialRunConfig(null);
     setTemplateScheduleMode(false);
     setTemplateDrawerOpen(true);
   }, [templateGroups]);
@@ -219,7 +215,6 @@ function ReportsPageInner() {
               <h1 style={reportPageTitleStyle}>
                 {headerCopy.title}
               </h1>
-              <p style={reportPageSubtitleStyle}>{headerCopy.subtitle}</p>
             </div>
             <div className="app-report-page__actions">
               {activeSection === "schedules" ? (
@@ -238,9 +233,11 @@ function ReportsPageInner() {
             <ReportCenterNav
               activeSection={activeSection}
               onSectionChange={navigateToSection}
-              libraryCollection={libraryCollection}
-              onLibraryCollectionChange={navigateToCollection}
-              counts={navCounts}
+              counts={{
+                library: navCounts.library,
+                schedules: navCounts.schedules,
+                templates: navCounts.templates,
+              }}
             />
 
             <div className="app-report-center-content" style={{ fontFamily: reportFont }}>
@@ -259,27 +256,32 @@ function ReportsPageInner() {
                   onEditSchedule={handleEditSchedule}
                   onNavigateToSchedules={() => navigate(buildReportCenterPath("schedules"))}
                   onNavigateToCollection={navigateToCollection}
+                  collectionCounts={{
+                    all: collectionCounts.library,
+                    recent: collectionCounts.recent,
+                    saved: collectionCounts.saved,
+                    starred: collectionCounts.starred,
+                    running: collectionCounts.running,
+                    scheduled: collectionCounts.scheduled,
+                    failed: collectionCounts.failed,
+                  }}
                 />
               )}
 
               {activeSection === "schedules" && (
-                <Suspense fallback={<TabFallback />}>
-                  <ScheduledReportsSection
-                    onScheduleNew={() => openScheduleReport()}
-                    onEditSchedule={handleEditSchedule}
-                  />
-                </Suspense>
+                <ScheduledReportsSection
+                  onScheduleNew={() => openScheduleReport()}
+                  onEditSchedule={handleEditSchedule}
+                />
               )}
 
               {activeSection === "templates" && (
-                <Suspense fallback={<TabFallback />}>
-                  <ReportTemplatesSection
-                    onRunTemplate={openTemplate}
-                    onViewReportOutput={(reportId) =>
-                      navigate(buildReportCenterPath("library", { reportId, collection: "all" }))
-                    }
-                  />
-                </Suspense>
+                <ReportTemplatesSection
+                  onRunTemplate={openTemplate}
+                  onViewReportOutput={(reportId) =>
+                    navigate(buildReportCenterPath("library", { reportId, collection: "all" }))
+                  }
+                />
               )}
 
               {activeSection === "insights" && <ReportsInsightsSection />}
@@ -309,9 +311,5 @@ function ReportsPageInner() {
 }
 
 export function Reports() {
-  return (
-    <ReportsProvider>
-      <ReportsPageInner />
-    </ReportsProvider>
-  );
+  return <ReportsPageInner />;
 }

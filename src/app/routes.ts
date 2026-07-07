@@ -35,6 +35,7 @@ import { PurchaseOrderTemplateSettings } from './pages/setup/PurchaseOrderTempla
 import { PurchaseOrderTemplatePreview } from './pages/setup/PurchaseOrderTemplatePreview';
 import { GeneratePurchaseOrder } from './pages/po/GeneratePurchaseOrder';
 import { Reports } from './pages/Reports';
+import { ReportsLayout } from './pages/ReportsLayout';
 import { ReportsRedirect } from './pages/ReportsRedirect';
 
 /** Must match Vite `base` (GitHub project site: /repo-name/ → basename /repo-name). */
@@ -173,24 +174,29 @@ export const router = createBrowserRouter(
             Component: GeneratePurchaseOrder,
           },
           {
-            path: '/reports',
-            Component: ReportsRedirect,
-          },
-          {
-            path: '/reports/library/:reportId?',
-            Component: Reports,
-          },
-          {
-            path: '/reports/schedules',
-            Component: Reports,
-          },
-          {
-            path: '/reports/templates',
-            Component: Reports,
-          },
-          {
-            path: '/reports/insights',
-            Component: Reports,
+            Component: ReportsLayout,
+            children: [
+              {
+                path: '/reports',
+                Component: ReportsRedirect,
+              },
+              {
+                path: '/reports/library/:reportId?',
+                Component: Reports,
+              },
+              {
+                path: '/reports/schedules',
+                Component: Reports,
+              },
+              {
+                path: '/reports/templates',
+                Component: Reports,
+              },
+              {
+                path: '/reports/insights',
+                Component: Reports,
+              },
+            ],
           },
         ],
       },

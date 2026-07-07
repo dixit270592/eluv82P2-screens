@@ -11,45 +11,25 @@ export type ReportCenterSection = "library" | "schedules" | "templates" | "insig
 export type LibraryCollection = "all" | "saved" | "starred" | "failed" | "running" | "scheduled" | "recent";
 
 const mainNav: { id: ReportCenterSection; label: string; icon: React.ReactNode }[] = [
+  { id: "insights", label: "Insights", icon: <BarChart2 size={16} aria-hidden /> },
   { id: "library", label: "Library", icon: <BookOpen size={16} aria-hidden /> },
   { id: "schedules", label: "Schedules", icon: <CalendarClock size={16} aria-hidden /> },
   { id: "templates", label: "Templates", icon: <LayoutTemplate size={16} aria-hidden /> },
-  { id: "insights", label: "Insights", icon: <BarChart2 size={16} aria-hidden /> },
-];
-
-const collections: { id: LibraryCollection; label: string }[] = [
-  { id: "all", label: "All Reports" },
-  { id: "recent", label: "Recent" },
-  { id: "saved", label: "Saved" },
-  { id: "starred", label: "Starred" },
-  { id: "running", label: "Running" },
-  { id: "scheduled", label: "Scheduled" },
-  { id: "failed", label: "Failed" },
 ];
 
 type ReportCenterNavProps = {
   activeSection: ReportCenterSection;
   onSectionChange: (section: ReportCenterSection) => void;
-  libraryCollection: LibraryCollection;
-  onLibraryCollectionChange: (collection: LibraryCollection) => void;
   counts: {
     library: number;
     schedules: number;
     templates: number;
-    saved: number;
-    starred: number;
-    failed: number;
-    running: number;
-    scheduled: number;
-    recent: number;
   };
 };
 
 export function ReportCenterNav({
   activeSection,
   onSectionChange,
-  libraryCollection,
-  onLibraryCollectionChange,
   counts,
 }: ReportCenterNavProps) {
   const sectionCount = (id: ReportCenterSection) => {
@@ -57,17 +37,6 @@ export function ReportCenterNav({
     if (id === "schedules") return counts.schedules;
     if (id === "templates") return counts.templates;
     return null;
-  };
-
-  const collectionCount = (id: LibraryCollection) => {
-    if (id === "all") return counts.library;
-    if (id === "saved") return counts.saved;
-    if (id === "starred") return counts.starred;
-    if (id === "failed") return counts.failed;
-    if (id === "running") return counts.running;
-    if (id === "scheduled") return counts.scheduled;
-    if (id === "recent") return counts.recent;
-    return 0;
   };
 
   return (
@@ -94,28 +63,6 @@ export function ReportCenterNav({
           );
         })}
       </div>
-
-      {activeSection === "library" && (
-        <div className="app-report-center-nav__collections">
-          <div className="app-report-center-nav__collections-label">Collections</div>
-          {collections.map((col) => {
-            const active = libraryCollection === col.id;
-            return (
-              <button
-                key={col.id}
-                type="button"
-                aria-current={active ? "true" : undefined}
-                onClick={() => onLibraryCollectionChange(col.id)}
-                className={`app-report-center-nav__collection${active ? " app-report-center-nav__collection--active" : ""}`}
-                style={{ fontFamily: reportFont }}
-              >
-                <span className="app-report-center-nav__collection-label">{col.label}</span>
-                <span className="app-report-center-nav__count app-report-center-nav__count--collection">{collectionCount(col.id)}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
     </nav>
   );
 }

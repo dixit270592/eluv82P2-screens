@@ -1,10 +1,14 @@
 import type { ReportApiEnvelope } from "../types/reportApi";
 
 import {
+  applyAuthorizationHeader,
+  isApiAuthenticated,
+  resolveAccessToken,
+} from "./accessToken";
+
+import {
 
   isReportAuthMessage,
-
-  redirectToLogin,
 
 } from "../utils/reportApiErrors";
 
@@ -82,84 +86,26 @@ export class ApiError extends Error {
 
 const API_ROOT = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 
-/** Keys used by the Element P2P Authenticate flow (swagger TokenModel.Token). */
-const TOKEN_STORAGE_KEYS = ["Token", "access_token", "token", "authToken", "jwt"] as const;
-const TOKEN_JSON_STORAGE_KEYS = ["currentUser", "user", "auth", "session"] as const;
+/** Max time to wait for any single API response before aborting (ms). */
+const FETCH_TIMEOUT_MS = 30_000;
 
-function normalizeBearerToken(raw: string | null | undefined): string | undefined {
-  const trimmed = raw?.trim();
-  if (!trimmed) return undefined;
-  return trimmed.replace(/^Bearer\s+/i, "");
-}
+/** @deprecated Prefer {@link isApiAuthenticated} from accessToken.ts */
+export const isReportApiConfigured = isApiAuthenticated;
 
-function readTokenFromJsonBlob(raw: string | null): string | undefined {
-  if (!raw) return undefined;
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    for (const field of ["Token", "token", "accessToken", "access_token", "jwt"]) {
-      const value = parsed[field];
-      if (typeof value === "string") {
-        const normalized = normalizeBearerToken(value);
-        if (normalized) return normalized;
-      }
-    }
-  } catch {
-    return undefined;
-  }
-  return undefined;
-}
-
-/**
- * Resolve the procurement API JWT from the same sources the legacy tab components relied on:
- * 1) VITE_API_TOKEN (local dev)
- * 2) localStorage/sessionStorage Token (Element P2P Authenticate/SelectTenant flow)
- * 3) Common nested session JSON blobs
- */
-/** Returns true when a Bearer token is available for Report API calls. */
-export function isReportApiConfigured(): boolean {
-  return Boolean(resolveApiAccessToken());
-}
-
-export function resolveApiAccessToken(): string | undefined {
-  const envToken = normalizeBearerToken(import.meta.env.VITE_API_TOKEN);
-  if (envToken) return envToken;
-
-  if (typeof window === "undefined") return undefined;
-
-  for (const key of TOKEN_STORAGE_KEYS) {
-    for (const store of [localStorage, sessionStorage]) {
-      try {
-        const token = normalizeBearerToken(store.getItem(key));
-        if (token) return token;
-      } catch {
-        // Storage may be blocked in embedded contexts.
-      }
-    }
-  }
-
-  for (const key of TOKEN_JSON_STORAGE_KEYS) {
-    try {
-      const token = readTokenFromJsonBlob(localStorage.getItem(key));
-      if (token) return token;
-    } catch {
-      // ignore
-    }
-  }
-
-  return undefined;
-}
+/** @deprecated Prefer {@link resolveAccessToken} from accessToken.ts */
+export const resolveApiAccessToken = resolveAccessToken;
 
 function buildUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/api/Report/${path}`;
   return API_ROOT ? `${API_ROOT}${normalized}` : normalized;
 }
 
-function getAuthHeaders(): HeadersInit {
-  const headers: Record<string, string> = {};
-  const token = resolveApiAccessToken();
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+function prepareRequestHeaders(init: RequestInit): Headers {
+  const headers = new Headers(init.headers);
+  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
   }
+  applyAuthorizationHeader(headers);
   return headers;
 }
 
@@ -223,8 +169,9 @@ function throwHttpError(
 
   if (response.status === 401 || response.status === 403) {
 
-    redirectToLogin();
-
+    // Do NOT call redirectToLogin() here: the demo GuestRoute would intercept the
+    // /login navigation and bounce an already-authenticated user to Dashboard ("/").
+    // Auth errors surface as ApiError so the report module can show inline error UI.
     throw new ApiError("Your session has expired. Please sign in again.", response.status, undefined, {
 
       url,
@@ -252,30 +199,26 @@ function throwHttpError(
 
 
 async function fetchWithAuth(path: string, init: RequestInit = {}): Promise<Response> {
-
-  const headers = new Headers(init.headers);
-
-  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
-
-    headers.set("Content-Type", "application/json");
-
+  if (import.meta.env.DEV && !resolveAccessToken()) {
+    console.warn(
+      "[Report API] No Authorization header — set VITE_API_TOKEN in .env or sign in via Element P2P Authenticate (localStorage Token).",
+    );
   }
 
-  Object.entries(getAuthHeaders()).forEach(([key, value]) => {
-
-    if (!headers.has(key)) headers.set(key, value);
-
-  });
-
-
+  const headers = prepareRequestHeaders(init);
 
   logReportApiHeaders(headers);
 
+  const url = buildUrl(path);
+  const method = (init.method ?? "GET").toUpperCase();
 
+  // Abort the request if the server does not respond within FETCH_TIMEOUT_MS.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
 
-    return await fetch(buildUrl(path), {
+    const response = await fetch(url, {
 
       ...init,
 
@@ -283,13 +226,34 @@ async function fetchWithAuth(path: string, init: RequestInit = {}): Promise<Resp
 
       credentials: "include",
 
+      signal: controller.signal,
+
     });
+
+    clearTimeout(timeoutId);
+    return response;
 
   } catch (error) {
 
-    const url = buildUrl(path);
+    clearTimeout(timeoutId);
 
-    const method = (init.method ?? "GET").toUpperCase();
+    // AbortError means the FETCH_TIMEOUT_MS deadline was reached.
+    if (error instanceof DOMException && error.name === "AbortError") {
+      logReportApiCall({
+        id: createReportApiLogId(),
+        timestamp: new Date().toISOString(),
+        method,
+        url,
+        requestBody: parseRequestBody(init),
+        error: `Request timed out after ${FETCH_TIMEOUT_MS}ms`,
+      });
+      throw new ApiError(
+        "Request timed out. Check your connection and try again.",
+        undefined,
+        undefined,
+        { url, method },
+      );
+    }
 
     logReportApiCall({
 
@@ -323,8 +287,8 @@ async function fetchWithAuth(path: string, init: RequestInit = {}): Promise<Resp
 
 function throwEnvelopeAuthFailure(message: string, details?: ApiErrorDetails): never {
 
-  redirectToLogin();
-
+  // Do NOT call redirectToLogin() here: the demo GuestRoute would intercept the
+  // /login navigation and bounce an already-authenticated user to Dashboard ("/").
   throw new ApiError(message || "Your session has expired. Please sign in again.", 401, undefined, details);
 
 }
@@ -528,65 +492,31 @@ export async function apiReportPaginatedRequest<TItem>(
 
 
 export async function apiDownloadBlob(path: string, body?: unknown): Promise<Blob> {
-
-  const headers = new Headers(getAuthHeaders());
-
-  if (body) headers.set("Content-Type", "application/json");
-
+  const init: RequestInit = {
+    method: "POST",
+    body: body ? JSON.stringify(body) : undefined,
+  };
   const url = buildUrl(path);
-
   const method = "POST";
-
   const startedAt = Date.now();
 
-
-
-  logReportApiHeaders(headers);
-
-
-
   let response: Response;
-
   try {
-
-    response = await fetch(url, {
-
-      method,
-
-      headers,
-
-      credentials: "include",
-
-      body: body ? JSON.stringify(body) : undefined,
-
-    });
-
+    response = await fetchWithAuth(path, init);
   } catch (error) {
-
+    if (error instanceof ApiError) throw error;
     logReportApiCall({
-
       id: createReportApiLogId(),
-
       timestamp: new Date().toISOString(),
-
       method,
-
       url,
-
       requestBody: body,
-
       error: error instanceof Error ? error.message : "Network error",
-
     });
-
     throw new ApiError("Network error. Check your connection and try again.", undefined, undefined, {
-
       url,
-
       method,
-
     });
-
   }
 
 

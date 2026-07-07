@@ -4,6 +4,13 @@ import { UI_FONT_STACK as F } from "../../tokens/typography";
 
 export const REPORT_DRAWER_WIDTH = 540;
 export const REPORT_NAV_WIDTH = 266;
+export const REPORT_DETAIL_MODAL_WIDTH = 1148;
+
+export const reportDetailModalPanelStyle: CSSProperties = {
+  width: `min(${REPORT_DETAIL_MODAL_WIDTH}px, calc(100vw - 48px))`,
+  maxWidth: `${REPORT_DETAIL_MODAL_WIDTH}px`,
+  flex: "0 0 auto",
+};
 
 export const reportFont = F;
 

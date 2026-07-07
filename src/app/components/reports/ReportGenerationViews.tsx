@@ -104,10 +104,22 @@ export function ReportGeneratingPanel({ reportName }: { reportName: string }) {
         aria-hidden
       >
         <motion.div
-          initial={{ width: reducedMotion ? "100%" : "0%" }}
-          animate={{ width: "100%" }}
-          transition={{ duration: reducedMotion ? 0.01 : 1.8, ease: "easeInOut" }}
-          style={{ height: "100%", background: P2P_BRAND.primary, borderRadius: "10px" }}
+          animate={
+            reducedMotion
+              ? { width: "40%" }
+              : { x: ["-100%", "240px"] }
+          }
+          transition={
+            reducedMotion
+              ? { duration: 0.01 }
+              : { duration: 1.2, repeat: Infinity, ease: "easeInOut" }
+          }
+          style={{
+            height: "100%",
+            width: reducedMotion ? "40%" : "40%",
+            background: P2P_BRAND.primary,
+            borderRadius: "10px",
+          }}
         />
       </div>
     </motion.div>

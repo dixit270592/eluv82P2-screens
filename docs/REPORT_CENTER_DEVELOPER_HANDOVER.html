@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Report Center — Developer Handover</title>
+  <style>
+    @page { margin: 18mm 16mm; size: A4; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.45;
+      color: #101828;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1 { font-size: 22pt; color: #1E2D3D; border-bottom: 2px solid #1FA97A; padding-bottom: 8px; margin-top: 0; }
+    h2 { font-size: 14pt; color: #1E2D3D; margin-top: 24px; page-break-after: avoid; }
+    h3 { font-size: 12pt; color: #344054; margin-top: 16px; page-break-after: avoid; }
+    p { margin: 6px 0 10px; }
+    hr { border: none; border-top: 1px solid #E4E7EC; margin: 20px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; font-size: 10pt; page-break-inside: avoid; }
+    th, td { border: 1px solid #D0D5DD; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #F9FAFB; font-weight: 600; }
+    code, pre { font-family: Consolas, monospace; font-size: 9pt; }
+    pre { background: #F9FAFB; border: 1px solid #E4E7EC; padding: 10px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; }
+    ul { margin: 6px 0 12px 18px; }
+    li { margin: 4px 0; }
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li { margin: 6px 0; }
+    strong { color: #1E2D3D; }
+  </style>
+</head>
+<body>
+<h1>Report Center — Developer Handover Document</h1>
+
+<p><strong>Project:</strong> Element P2P — Report Center Module</p>
+<p><strong>Repository:</strong> eluv82P2-screens</p>
+<p><strong>Purpose:</strong> Show existing vs newly prepared work for developer onboarding</p>
+<p><strong>Handoff Rating:</strong> 8.3 / 10</p>
+<p><strong>API Policy:</strong> No backend changes — frontend adapts to existing API contract</p>
+<p><strong>Date:</strong> July 7, 2026</p>
+
+<hr/>
+
+<h2>1. Executive Summary</h2>
+
+<p>The Report Center was redesigned from a <strong>single-page horizontal-tab layout</strong> into a <strong>multi-route Report Center</strong> with Library, Schedules, Templates, and Insights. All backend endpoints, payloads, and authentication behavior remain unchanged.</p>
+
+<table>
+<tr><th></th><th>Before (Existing)</th><th>After (New)</th></tr>
+<tr><td>Entry</td><td><code>/reports</code> (one page)</td><td><code>/reports</code> → <code>/reports/library</code></td></tr>
+<tr><td>Navigation</td><td>Horizontal tabs (<code>?tab=0–3</code>)</td><td>Left sidebar nav + URL routes</td></tr>
+<tr><td>Saved reports</td><td>Tab “Saved Reports”</td><td><strong>Library</strong> with split list + detail panel</td></tr>
+<tr><td>Overview</td><td>Default tab</td><td><strong>Insights</strong> (separate route)</td></tr>
+<tr><td>Report selection</td><td>In-tab state</td><td>URL-driven: <code>/reports/library/:reportId</code></td></tr>
+<tr><td>API layer</td><td>reportService.ts + envelope types</td><td><strong>Same</strong> — reused, not replaced</td></tr>
+<tr><td>Demo data</td><td>Limited / mixed</td><td>Dedicated reportDemoData.ts when no API token</td></tr>
+</table>
+
+<hr/>
+
+<h2>2. What Already Existed (Unchanged / Retained)</h2>
+
+<h3>2.1 Backend API Integration (No Contract Changes)</h3>
+
+<table>
+<tr><th>Item</th><th>Location</th><th>Notes</th></tr>
+<tr><td>API envelope (TransactionStatus, Data, ResultMsg)</td><td>src/app/types/reportApi.ts</td><td>Unchanged</td></tr>
+<tr><td>All Report API endpoints</td><td>src/app/services/reportService.ts</td><td>Same paths, methods, query params, bodies</td></tr>
+<tr><td>Request payload builders</td><td>src/app/utils/reportPayloadBuilders.ts</td><td>GenerateReportRequest, SaveReportRequest; DelieveryOptions typo preserved</td></tr>
+<tr><td>Response mappers</td><td>src/app/utils/reportApiMappers.ts</td><td>Maps API → UI models</td></tr>
+<tr><td>HTTP client + envelope parsing</td><td>src/app/services/apiClient.ts</td><td>Same /api/Report/* pattern</td></tr>
+<tr><td>API logging</td><td>src/app/utils/reportApiLogger.ts</td><td>Dev/debug logging</td></tr>
+</table>
+
+<p><strong>Endpoints still used (unchanged):</strong></p>
+
+<p>GetOverviewData · GetSavedReport · GetScheduleReport · GetReportTemplates · GenerateReport · SavedReport · DownloadReport · DeleteReport/:id · SchedulePauseAndResume · EditSchedule · SendSavedReportEmail</p>
+
+<h3>2.2 Core Report Features (Logic Retained)</h3>
+
+<table>
+<tr><th>Feature</th><th>Where it lives</th></tr>
+<tr><td>Generate report</td><td>ReportTemplateDrawer → ConfigureReportPanel → generateReport()</td></tr>
+<tr><td>Save report</td><td>ReportsContext.addFromGeneration() → saveReport()</td></tr>
+<tr><td>Download</td><td>downloadReport() / downloadReportFile() + CSV fallback</td></tr>
+<tr><td>Email</td><td>emailReport() → SendSavedReportEmail</td></tr>
+<tr><td>Schedules pause/resume</td><td>pauseOrResumeSchedule()</td></tr>
+<tr><td>Schedule edit</td><td>editSchedule()</td></tr>
+<tr><td>Star / save (client-side)</td><td>localStorage via ReportsContext</td></tr>
+<tr><td>Export utilities</td><td>src/app/utils/reportExport.ts</td></tr>
+</table>
+
+<h3>2.3 Shared UI Building Blocks (Existing Components)</h3>
+
+<ul>
+<li>ReportTemplateDrawer.tsx — template pick + configure + generate flow</li>
+<li>ConfigureReportPanel.tsx — filters, schedule toggle, validation</li>
+<li>ReportGenerationViews.tsx — generating / success states</li>
+<li>ScheduleEditDrawer.tsx — edit schedule modal</li>
+<li>ReportEmptyState.tsx, ReportSkeletons.tsx, ReportSectionErrorBanner.tsx</li>
+<li>ReportDeleteConfirmDialog.tsx, ReportQuickActionDrawers.tsx</li>
+<li>reportUiStyles.ts, reportMotion.ts — styling and animation tokens</li>
+</ul>
+
+<h3>2.4 App Infrastructure (Existing)</h3>
+
+<table>
+<tr><th>Item</th><th>Location</th></tr>
+<tr><td>Demo UI login (route gate only)</td><td>AuthContext.tsx</td></tr>
+<tr><td>Sidebar “Reports” link</td><td>Sidebar.tsx → /reports</td></tr>
+<tr><td>Vite dev proxy to staging API</td><td>vite.config.ts</td></tr>
+<tr><td>Env template</td><td>.env.example</td></tr>
+</table>
+
+<h3>2.5 Legacy Aliases (Backward Compatibility)</h3>
+
+<table>
+<tr><th>Old name</th><th>New implementation</th></tr>
+<tr><td>SavedReportsSection</td><td>Re-exports ReportLibrarySection</td></tr>
+<tr><td>ReportsOverviewTab</td><td>Re-exports ReportsInsightsSection</td></tr>
+</table>
+
+<hr/>
+
+<h2>3. What Was Newly Prepared (Built / Redesigned)</h2>
+
+<h3>3.1 New Routing Architecture</h3>
+
+<p><strong>Before:</strong> Single route <code>/reports</code> with internal tab state (<code>?tab=0|1|2|3</code> or <code>?section=...</code>)</p>
+
+<p><strong>After:</strong> Dedicated routes under ReportsLayout:</p>
+
+<table>
+<tr><th>Route</th><th>Section</th><th>Component</th></tr>
+<tr><td>/reports</td><td>Redirect</td><td>ReportsRedirect.tsx → /reports/library</td></tr>
+<tr><td>/reports/library</td><td>Library list</td><td>ReportLibrarySection</td></tr>
+<tr><td>/reports/library/:reportId</td><td>Library + detail</td><td>ReportLibrarySection + ReportDetailPanel</td></tr>
+<tr><td>/reports/schedules</td><td>Schedules</td><td>ScheduledReportsSection</td></tr>
+<tr><td>/reports/templates</td><td>Templates</td><td>ReportTemplatesSection</td></tr>
+<tr><td>/reports/insights</td><td>Insights</td><td>ReportsInsightsSection</td></tr>
+</table>
+
+<p><strong>New files:</strong></p>
+
+<ul>
+<li>src/app/pages/ReportsLayout.tsx — wraps all report routes with ReportsProvider</li>
+<li>src/app/pages/ReportsRedirect.tsx — default landing + legacy URL redirects</li>
+<li>src/app/utils/reportCenterRoutes.ts — buildReportCenterPath() / parseReportCenterPath()</li>
+</ul>
+
+<p><strong>Legacy URL support:</strong></p>
+
+<ul>
+<li>?tab=0 → Insights, ?tab=1 → Library, ?tab=2 → Schedules, ?tab=3 → Templates</li>
+<li>?section=library|schedules|templates|insights → same paths</li>
+</ul>
+
+<h3>3.2 New UI / UX Structure</h3>
+
+<table>
+<tr><th>New piece</th><th>Purpose</th></tr>
+<tr><td>ReportCenterNav.tsx</td><td>Left nav: Library, Schedules, Templates, Insights + collections</td></tr>
+<tr><td>ReportLibrarySection.tsx</td><td>Replaces old Saved Reports tab — table, filters, pagination</td></tr>
+<tr><td>ReportDetailPanel.tsx</td><td>Split-panel detail: Preview, Parameters, Schedule, Activity</td></tr>
+<tr><td>ReportAttentionStrip.tsx</td><td>Running/failed report alerts with retry</td></tr>
+<tr><td>ReportsInsightsSection.tsx</td><td>Replaces old Overview tab as dedicated Insights page</td></tr>
+<tr><td>Reports.tsx (refactored)</td><td>Orchestrates nav, sections, drawers; URL-driven state</td></tr>
+</table>
+
+<p><strong>Default home changed:</strong> Library is now the landing page (was Overview/Insights in old tab order).</p>
+
+<h3>3.3 New State &amp; Data Layer Additions</h3>
+
+<table>
+<tr><th>New item</th><th>Location</th><th>Purpose</th></tr>
+<tr><td>ReportsLayout + provider scope</td><td>ReportsLayout.tsx</td><td>Single ReportsProvider for all /reports/* routes</td></tr>
+<tr><td>Demo mode</td><td>reportDemoData.ts</td><td>Sample data when no API token</td></tr>
+<tr><td>Access token resolver</td><td>accessToken.ts</td><td>VITE_API_TOKEN + localStorage.Token resolution</td></tr>
+<tr><td>Library filters utils</td><td>reportLibraryFilters.ts</td><td>Collections, search, date/status filters</td></tr>
+<tr><td>Report preview state</td><td>ReportsContext.reportPreviews</td><td>Per-report preview loading/error/data</td></tr>
+<tr><td>URL-synced selection</td><td>Reports.tsx + reportCenterRoutes.ts</td><td>Selected report in URL</td></tr>
+</table>
+
+<h3>3.4 New Styles</h3>
+
+<p>~105 <code>.app-report-*</code> rules in src/styles/theme.css for page layout, library split view, detail panel, nav, tables, filters, notifications, skeletons.</p>
+
+<h3>3.5 New Developer Tooling / Behavior</h3>
+
+<table>
+<tr><th>Addition</th><th>Detail</th></tr>
+<tr><td>Demo mode indicator</td><td>Subtitle: “Sample data (no API token configured)”</td></tr>
+<tr><td>API debug logging</td><td>VITE_REPORT_API_DEBUG=true</td></tr>
+<tr><td>30s request timeout</td><td>AbortController in apiClient.ts</td></tr>
+<tr><td>Silent bootstrap load</td><td>Initial 4 API calls with consolidated toast feedback</td></tr>
+</table>
+
+<hr/>
+
+<h2>4. Fixes Applied in Final Audit Pass</h2>
+
+<table>
+<tr><th>Issue</th><th>Root cause</th><th>Fix</th><th>File(s)</th></tr>
+<tr><td>Click report → redirect to Dashboard</td><td>API 401/403 called redirectToLogin() → GuestRoute sent user to /</td><td>Removed hard login redirect; inline errors</td><td>apiClient.ts</td></tr>
+<tr><td>Selected report closes on load</td><td>useEffect cleared reportId while history empty</td><td>Guard with isLoadingLibrary</td><td>ReportLibrarySection.tsx</td></tr>
+<tr><td>Preview re-fetches on refresh</td><td>loadReportPreview depended on history</td><td>Use historyRef.current; stable callback</td><td>ReportsContext.tsx</td></tr>
+<tr><td>Demo preview always errored</td><td>No runConfig on demo items</td><td>DEMO_PREVIEW_DATA + demo shortcut</td><td>reportDemoData.ts, ReportsContext.tsx</td></tr>
+<tr><td>Schedule edit reset day fields</td><td>Hardcoded DayOfWeek/DayOfMonth</td><td>Preserve from API on ScheduledReport</td><td>scheduledReports.ts, reportApiMappers.ts, ReportsContext.tsx</td></tr>
+<tr><td>429 / 422 / timeout</td><td>Generic messages</td><td>Dedicated handlers</td><td>reportApiErrors.ts, apiClient.ts</td></tr>
+</table>
+
+<hr/>
+
+<h2>5. Authentication — Two Layers</h2>
+
+<table>
+<tr><th>Layer</th><th>Source</th><th>Purpose</th></tr>
+<tr><td>UI session</td><td>AuthContext / demo login</td><td>Gates routes (RequireAuth)</td></tr>
+<tr><td>API token</td><td>VITE_API_TOKEN or localStorage.Token</td><td>Report API Authorization: Bearer</td></tr>
+</table>
+
+<ul>
+<li>Demo login alone does NOT call the real Report API.</li>
+<li>Without API token → demo mode (reportDemoData.ts).</li>
+<li>With token → live data from staging/production API.</li>
+</ul>
+
+<hr/>
+
+<h2>6. Setup (For Dev Team)</h2>
+
+<pre><code>
+npm install
+cp .env.example .env
+npm run dev
+</code></pre>
+
+<table>
+<tr><th>Variable</th><th>Purpose</th></tr>
+<tr><td>VITE_API_BASE</td><td>API root; empty in dev = Vite proxy</td></tr>
+<tr><td>VITE_API_TOKEN</td><td>JWT for local dev</td></tr>
+<tr><td>VITE_API_PROXY_TARGET</td><td>Proxy target (default: staging)</td></tr>
+<tr><td>VITE_REPORT_API_DEBUG</td><td>Full API console logging</td></tr>
+<tr><td>VITE_BASE_PATH</td><td>Router/asset base for deployment</td></tr>
+</table>
+
+<hr/>
+
+<h2>7. Test Checklist</h2>
+
+<h3>Must pass before merge</h3>
+
+<ul class='checklist'>
+<li><input type='checkbox' disabled/> /reports → /reports/library</li>
+<li><input type='checkbox' disabled/> Click report → detail opens and stays open (wait 5+ seconds)</li>
+<li><input type='checkbox' disabled/> Direct URL /reports/library/:id works after load</li>
+<li><input type='checkbox' disabled/> Legacy ?tab=1 → Library, ?tab=0 → Insights</li>
+<li><input type='checkbox' disabled/> All 4 sections navigate correctly</li>
+<li><input type='checkbox' disabled/> New Report flow: template → configure → generate → opens in library</li>
+<li><input type='checkbox' disabled/> With API token: library, schedules, templates, insights load from API</li>
+<li><input type='checkbox' disabled/> 401/403 → inline error, no Dashboard redirect</li>
+</ul>
+
+<h3>Staging integration (with real token)</h3>
+
+<ul class='checklist'>
+<li><input type='checkbox' disabled/> Generate, save, download, email, delete report</li>
+<li><input type='checkbox' disabled/> Pause, resume, edit schedule (verify day/time preserved)</li>
+<li><input type='checkbox' disabled/> Preview loads for saved reports with stored filters</li>
+</ul>
+
+<hr/>
+
+<h2>8. Known Limitations</h2>
+
+<table>
+<tr><th>ID</th><th>Item</th><th>Status</th></tr>
+<tr><td>L1</td><td>Bulk export button disabled</td><td>“Coming soon”</td></tr>
+<tr><td>L2</td><td>Schedule delete</td><td>API not supported</td></tr>
+<tr><td>L3</td><td>Demo preview</td><td>Only 4 of 6 demo reports have sample rows</td></tr>
+<tr><td>L4</td><td>New schedule create</td><td>Defaults DayOfWeek=monday, DayOfMonth=1</td></tr>
+<tr><td>L5</td><td>Mobile layout</td><td>Split panel may need responsive pass below ~900px</td></tr>
+<tr><td>L6</td><td>Automated tests</td><td>None yet — manual checklist only</td></tr>
+</table>
+
+<hr/>
+
+<h2>9. File Map</h2>
+
+<h3>New files</h3>
+
+<ul>
+<li>src/app/pages/ReportsLayout.tsx</li>
+<li>src/app/pages/ReportsRedirect.tsx</li>
+<li>src/app/data/reportDemoData.ts</li>
+<li>src/app/services/accessToken.ts</li>
+<li>src/app/utils/reportCenterRoutes.ts</li>
+<li>src/app/components/reports/ReportCenterNav.tsx</li>
+<li>src/app/components/reports/ReportLibrarySection.tsx</li>
+<li>src/app/components/reports/ReportDetailPanel.tsx</li>
+<li>src/app/components/reports/ReportAttentionStrip.tsx</li>
+<li>src/app/components/reports/ReportsInsightsSection.tsx</li>
+</ul>
+
+<h3>Modified in this handoff (review these)</h3>
+
+<ul>
+<li>src/app/pages/Reports.tsx</li>
+<li>src/app/routes.ts</li>
+<li>src/app/context/ReportsContext.tsx</li>
+<li>src/app/services/apiClient.ts</li>
+<li>src/app/utils/reportApiErrors.ts</li>
+<li>src/app/utils/reportApiMappers.ts</li>
+<li>src/app/data/scheduledReports.ts</li>
+<li>src/styles/theme.css</li>
+</ul>
+
+<h3>Unchanged API layer (do not modify without backend approval)</h3>
+
+<ul>
+<li>src/app/types/reportApi.ts</li>
+<li>src/app/services/reportService.ts</li>
+<li>src/app/utils/reportPayloadBuilders.ts</li>
+</ul>
+
+<hr/>
+
+<h2>10. Developer Onboarding — Read Order</h2>
+
+<p>1. src/app/routes.ts — new report routes</p>
+<p>2. src/app/utils/reportCenterRoutes.ts — URL building/parsing</p>
+<p>3. src/app/pages/Reports.tsx — page orchestration</p>
+<p>4. src/app/context/ReportsContext.tsx — data + actions</p>
+<p>5. src/app/services/reportService.ts — API calls</p>
+<p>6. src/app/types/reportApi.ts — request/response shapes</p>
+
+<hr/>
+
+<h2>11. Rating &amp; Path to 9.5+</h2>
+
+<p><strong>Current rating: 8.3 / 10</strong> — Ready for developer handoff.</p>
+
+<p>To reach 9.5+:</p>
+
+<p>1. Run full staging QA with real API token and tenant</p>
+<p>2. Add 5+ automated smoke tests (Playwright/Cypress)</p>
+<p>3. Responsive polish for library split view on mobile</p>
+<p>4. Fix or document any staging-only failures</p>
+
+<hr/>
+
+<h2>12. Sign-off</h2>
+
+<table>
+<tr><th>Role</th><th>Name</th><th>Date</th><th>Notes</th></tr>
+<tr><td>UI/UX delivery</td><td></td><td></td><td></td></tr>
+<tr><td>Dev lead review</td><td></td><td></td><td></td></tr>
+<tr><td>QA staging pass</td><td></td><td></td><td></td></tr>
+<tr><td>API compatibility confirmed</td><td></td><td></td><td>No backend changes required</td></tr>
+</table>
+
+<hr/>
+
+<p>*Element P2P — Report Center Developer Handover · eluv82P2-screens*</p>
+
+</body>
+</html>

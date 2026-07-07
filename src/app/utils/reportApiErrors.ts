@@ -102,6 +102,28 @@ export function resolveReportApiError(error: unknown): ResolvedReportApiError {
       };
     }
 
+    // 429 Too Many Requests — retryable, specific guidance for the user.
+    if (error.status === 429) {
+      return {
+        kind: "client",
+        message: "Too many requests. Please wait a moment before trying again.",
+        isAuthError: false,
+        isRetryable: true,
+        status: 429,
+      };
+    }
+
+    // 422 Unprocessable Entity — validation error from the backend; surface the server message.
+    if (error.status === 422) {
+      return {
+        kind: "client",
+        message: sanitizedMessage || "The request contained invalid data. Please review your inputs and try again.",
+        isAuthError: false,
+        isRetryable: false,
+        status: 422,
+      };
+    }
+
     if (error.status != null && error.status >= 400 && error.status < 500 && !isAuthError) {
       return {
         kind: "client",
@@ -152,6 +174,19 @@ export function resolveReportApiError(error: unknown): ResolvedReportApiError {
     return {
       kind: "network",
       message: "Network error. Check your connection and try again.",
+      isAuthError: false,
+      isRetryable: true,
+    };
+  }
+
+  // AbortError from the fetch timeout (DOMException wraps AbortError in some environments).
+  if (
+    error instanceof DOMException && error.name === "AbortError" ||
+    (error instanceof ApiError && error.message.startsWith("Request timed out"))
+  ) {
+    return {
+      kind: "network",
+      message: "Request timed out. Check your connection and try again.",
       isAuthError: false,
       isRetryable: true,
     };

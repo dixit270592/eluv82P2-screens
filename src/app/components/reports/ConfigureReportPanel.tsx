@@ -420,28 +420,35 @@ export function ConfigureReportFooter({
   onCancel,
   onRun,
   scheduleMode = false,
+  isRunning = false,
 }: {
   onBack: () => void;
   onCancel: () => void;
   onRun: () => void;
   scheduleMode?: boolean;
+  isRunning?: boolean;
 }) {
   return (
     <div className="app-report-drawer-footer app-report-modal-footer-split">
-      <button type="button" onClick={onBack} style={reportCancelBtnStyle}>
+      <button type="button" onClick={onBack} disabled={isRunning} style={reportCancelBtnStyle}>
         Back
       </button>
       <div className="app-report-drawer-footer__actions">
-        <button type="button" onClick={onCancel} style={reportCancelBtnStyle}>
+        <button type="button" onClick={onCancel} disabled={isRunning} style={reportCancelBtnStyle}>
           Cancel
         </button>
         <button
           type="button"
           onClick={onRun}
+          disabled={isRunning}
           className="app-report-drawer-footer__primary"
-          style={reportPrimaryBtnStyle}
-          onMouseEnter={(e) => onPrimaryBtnHover(e, true)}
-          onMouseLeave={(e) => onPrimaryBtnHover(e, false)}
+          style={{
+            ...reportPrimaryBtnStyle,
+            opacity: isRunning ? 0.6 : 1,
+            cursor: isRunning ? "not-allowed" : "pointer",
+          }}
+          onMouseEnter={(e) => !isRunning && onPrimaryBtnHover(e, true)}
+          onMouseLeave={(e) => !isRunning && onPrimaryBtnHover(e, false)}
         >
           {scheduleMode ? "Schedule Report" : "Run Report"}
         </button>

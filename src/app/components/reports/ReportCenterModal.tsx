@@ -103,12 +103,19 @@ export function ReportCenterModal({
                   </div>
                   <button
                     type="button"
-                    onClick={handleClose}
+                    onClick={() => {
+                      if (!preventDismiss) handleClose();
+                    }}
+                    disabled={preventDismiss}
                     aria-label="Close dialog"
                     className="app-report-modal__close"
-                    style={reportGhostIconBtnStyle}
-                    onMouseEnter={(e) => onGhostBtnHover(e, true)}
-                    onMouseLeave={(e) => onGhostBtnHover(e, false)}
+                    style={{
+                      ...reportGhostIconBtnStyle,
+                      opacity: preventDismiss ? 0.4 : 1,
+                      cursor: preventDismiss ? "not-allowed" : "pointer",
+                    }}
+                    onMouseEnter={(e) => !preventDismiss && onGhostBtnHover(e, true)}
+                    onMouseLeave={(e) => !preventDismiss && onGhostBtnHover(e, false)}
                   >
                     <X size={18} color="#667085" />
                   </button>

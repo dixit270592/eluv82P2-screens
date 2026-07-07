@@ -75,5 +75,11 @@ export function parseResponseBody(text: string): unknown {
 
 export function logReportApiHeaders(headers: Headers): void {
   if (!isDebugEnabled()) return;
-  console.debug(`${LOG_PREFIX} request headers`, redactHeaders(headers));
+  const redacted = redactHeaders(headers);
+  console.debug(`${LOG_PREFIX} request headers`, redacted);
+  if (!headers.has("Authorization")) {
+    console.warn(
+      `${LOG_PREFIX} Authorization header missing — set VITE_API_TOKEN or localStorage Token from Element P2P Authenticate.`,
+    );
+  }
 }

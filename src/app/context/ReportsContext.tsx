@@ -23,6 +23,7 @@ import {
   generateReportPage,
   getOverviewData,
   getReportTemplates,
+  getSavedReports,
   getSavedReportsForYear,
   getScheduleReports,
   pauseOrResumeSchedule,
@@ -55,10 +56,64 @@ import {
   type ExportFormat,
 } from "../utils/reportExport";
 import { DEFAULT_TIMEZONE } from "../types/reportApi";
+import type { SavedReportApiItem } from "../types/reportApi";
 import {
   resolveReportApiError,
   shouldToastReportApiFailure,
 } from "../utils/reportApiErrors";
+import {
+  DEMO_OVERVIEW_CHARTS,
+  DEMO_OVERVIEW_COUNTS,
+  DEMO_PREVIEW_DATA,
+  DEMO_RECENT_ACTIVITY,
+  DEMO_REPORT_HISTORY,
+  DEMO_SCHEDULED_REPORTS,
+  DEMO_TEMPLATE_GROUPS,
+  isDemoReportDataEnabled,
+} from "../data/reportDemoData";
+
+/** Normalize saved-report rows for library display without altering API mappers. */
+function normalizeLibraryReportItem(item: ReportHistoryItem): ReportHistoryItem {
+  return {
+    ...item,
+    owner: "—",
+    lastRun: item.created,
+    status: "completed",
+  };
+}
+
+function buildLatestReportByTemplateId(history: ReportHistoryItem[]): Map<string, ReportHistoryItem> {
+  const map = new Map<string, ReportHistoryItem>();
+  const sorted = [...history].sort(
+    (a, b) => (Date.parse(b.created) || 0) - (Date.parse(a.created) || 0),
+  );
+
+  for (const row of sorted) {
+    const keys = [row.runConfig?.templateId, row.apiPayload?.reportTemplateType, row.type].filter(
+      (key): key is string => Boolean(key),
+    );
+    for (const key of keys) {
+      if (!map.has(key)) map.set(key, row);
+    }
+  }
+
+  return map;
+}
+
+function mapSavedReportsFromApi(
+  items: SavedReportApiItem[],
+  starred: Set<string>,
+  saved: Set<string>,
+): ReportHistoryItem[] {
+  return items.map((item) => {
+    const histItem = normalizeLibraryReportItem(mapSavedReportItem(item, starred, saved));
+    return {
+      ...histItem,
+      starred: starred.has(histItem.id) || histItem.starred,
+      saved: saved.has(histItem.id),
+    };
+  });
+}
 
 const STARRED_KEY = "eluv8p2p_starred_reports";
 const LEGACY_STARRED_KEY = "element-p2p-report-starred-ids";
@@ -119,6 +174,8 @@ function triggerBrowserDownload(blob: Blob, filename: string) {
 
 type ReportsContextValue = {
   history: ReportHistoryItem[];
+  libraryPageRows: ReportHistoryItem[];
+  libraryApiTotalCount: number;
   scheduledReports: ScheduledReport[];
   templateGroups: ReportTemplateGroup[];
   activity: RecentActivityItem[];
@@ -139,6 +196,11 @@ type ReportsContextValue = {
   addActivity: (type: RecentActivityType, description: string, user?: string) => void;
   refreshOverview: () => Promise<void>;
   reloadLibrary: () => Promise<boolean>;
+  fetchLibraryPage: (
+    pageIndex: number,
+    sortParam: "asc" | "desc",
+    options?: { silent?: boolean },
+  ) => Promise<boolean>;
   reloadSchedules: () => Promise<boolean>;
   reloadTemplates: () => Promise<boolean>;
   reloadOverview: () => Promise<boolean>;
@@ -179,6 +241,8 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
   const [savedIds, setSavedIds] = useState<Set<string>>(() => loadIdSet(SAVED_KEY));
   const [refreshKey, setRefreshKey] = useState(0);
   const [history, setHistory] = useState<ReportHistoryItem[]>([]);
+  const [libraryPageRows, setLibraryPageRows] = useState<ReportHistoryItem[]>([]);
+  const [libraryApiTotalCount, setLibraryApiTotalCount] = useState(0);
   const [scheduledReports, setScheduledReports] = useState<ScheduledReport[]>([]);
   const [templateGroups, setTemplateGroups] = useState<ReportTemplateGroup[]>([]);
   const [activity, setActivity] = useState<RecentActivityItem[]>([]);
@@ -218,19 +282,20 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
   const reloadLibrary = useCallback(async (options?: { silent?: boolean }): Promise<boolean> => {
     setIsLoadingLibrary(true);
     setLibraryError(null);
+    if (isDemoReportDataEnabled()) {
+      const demoRows = DEMO_REPORT_HISTORY.map(normalizeLibraryReportItem);
+      setHistory(demoRows);
+      setIsLoadingLibrary(false);
+      return true;
+    }
     try {
+      // Option A: no month picker in the library UI — load the full current year via
+      // getSavedReportsForYear (12 parallel GetSavedReport calls) and paginate client-side.
       const year = new Date().getFullYear();
       const result = await getSavedReportsForYear(year);
       const starred = starredIdsRef.current;
       const saved = savedIdsRef.current;
-      const mapped = result.items.map((item) => {
-        const histItem = mapSavedReportItem(item, starred, saved);
-        return {
-          ...histItem,
-          starred: starred.has(histItem.id) || histItem.starred,
-          saved: saved.has(histItem.id),
-        };
-      });
+      const mapped = mapSavedReportsFromApi(result.items, starred, saved);
       setHistory(mapped);
       return true;
     } catch (error) {
@@ -245,9 +310,62 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Paginated table fetch — calls getSavedReports with pageIndex + sortParam (current month/year).
+  const fetchLibraryPage = useCallback(
+    async (pageIndex: number, sortParam: "asc" | "desc", options?: { silent?: boolean }): Promise<boolean> => {
+      setIsLoadingLibrary(true);
+      setLibraryError(null);
+      if (isDemoReportDataEnabled()) {
+        const demoRows = DEMO_REPORT_HISTORY.map(normalizeLibraryReportItem);
+        setLibraryApiTotalCount(demoRows.length);
+        const start = (pageIndex - 1) * 10;
+        setLibraryPageRows(demoRows.slice(start, start + 10));
+        setIsLoadingLibrary(false);
+        return true;
+      }
+      try {
+        const now = new Date();
+        const response = await getSavedReports({
+          month: now.getMonth() + 1,
+          year: now.getFullYear(),
+          sortBy: "CreatedAt",
+          sortParam,
+          pageIndex,
+          pageSize: 10,
+        });
+        const starred = starredIdsRef.current;
+        const saved = savedIdsRef.current;
+        const pageRows = mapSavedReportsFromApi(response.items, starred, saved);
+        setLibraryPageRows(pageRows);
+        setLibraryApiTotalCount(response.totalCount ?? pageRows.length);
+        setHistory((prev) => {
+          const merged = new Map(prev.map((row) => [row.id, row]));
+          pageRows.forEach((row) => merged.set(row.id, row));
+          return [...merged.values()];
+        });
+        return true;
+      } catch (error) {
+        const resolved = resolveReportApiError(error);
+        setLibraryError(resolved.message);
+        if (!options?.silent && shouldToastReportApiFailure(error)) {
+          toast.error(resolved.message);
+        }
+        return false;
+      } finally {
+        setIsLoadingLibrary(false);
+      }
+    },
+    [],
+  );
+
   const reloadSchedules = useCallback(async (options?: { silent?: boolean }): Promise<boolean> => {
     setIsLoadingSchedules(true);
     setSchedulesError(null);
+    if (isDemoReportDataEnabled()) {
+      setScheduledReports(DEMO_SCHEDULED_REPORTS);
+      setIsLoadingSchedules(false);
+      return true;
+    }
     try {
       const now = new Date();
       const result = await getScheduleReports({
@@ -276,6 +394,11 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
   const reloadTemplates = useCallback(async (options?: { silent?: boolean }): Promise<boolean> => {
     setIsLoadingTemplates(true);
     setTemplatesError(null);
+    if (isDemoReportDataEnabled()) {
+      setTemplateGroups(DEMO_TEMPLATE_GROUPS);
+      setIsLoadingTemplates(false);
+      return true;
+    }
     try {
       const data = await getReportTemplates();
       const flat = flattenTemplateList(data).map(mapTemplateItem);
@@ -296,6 +419,13 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
   const reloadOverview = useCallback(async (options?: { silent?: boolean }): Promise<boolean> => {
     setIsLoadingOverview(true);
     setOverviewError(null);
+    if (isDemoReportDataEnabled()) {
+      setOverviewCounts(DEMO_OVERVIEW_COUNTS);
+      setOverviewCharts(DEMO_OVERVIEW_CHARTS);
+      setRefreshKey((value) => value + 1);
+      setIsLoadingOverview(false);
+      return true;
+    }
     try {
       const data = await getOverviewData();
       if (isOverviewDataEmpty(data)) {
@@ -321,6 +451,12 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (isDemoReportDataEnabled()) {
+      setActivity(DEMO_RECENT_ACTIVITY);
+    }
+  }, []);
+
+  useEffect(() => {
     void (async () => {
       const [libraryOk, schedulesOk, templatesOk, overviewOk] = await Promise.all([
         reloadLibrary({ silent: true }),
@@ -328,18 +464,22 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
         reloadTemplates({ silent: true }),
         reloadOverview({ silent: true }),
       ]);
+      if (libraryOk) {
+        await fetchLibraryPage(1, "desc", { silent: true });
+      }
       const successCount = [libraryOk, schedulesOk, templatesOk, overviewOk].filter(Boolean).length;
       hasLoadedOnceRef.current = true;
+      if (isDemoReportDataEnabled()) return;
       if (successCount === 0) {
         const authHint = isReportApiConfigured()
           ? "Report data is unavailable. Ensure a tenant is selected in the procurement API."
-          : "Report data is unavailable. Sign in to the procurement API and ensure a tenant is selected.";
+          : "Report data is unavailable. Set VITE_API_TOKEN in .env or sign in via Element P2P Authenticate (localStorage Token).";
         toast.error(authHint);
       } else if (successCount < 4) {
         toast.warning("Some report sections couldn't be loaded. Retry from the section that failed.");
       }
     })();
-  }, [reloadLibrary, reloadOverview, reloadSchedules, reloadTemplates]);
+  }, [reloadLibrary, reloadOverview, reloadSchedules, reloadTemplates, fetchLibraryPage]);
 
   const addActivity = useCallback((type: RecentActivityType, description: string, user = "You") => {
     setActivity((prev) => [
@@ -355,6 +495,9 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
       reloadSchedules(),
       reloadTemplates(),
     ]);
+    if (libraryOk) {
+      await fetchLibraryPage(1, "desc", { silent: true });
+    }
     const successCount = [overviewOk, libraryOk, schedulesOk, templatesOk].filter(Boolean).length;
     if (successCount === 4) {
       addActivity("export_completed", "Report data refreshed");
@@ -364,7 +507,7 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
     } else {
       toast.warning("Some report data couldn't be refreshed. Showing the last loaded data.");
     }
-  }, [addActivity, reloadLibrary, reloadOverview, reloadSchedules, reloadTemplates]);
+  }, [addActivity, fetchLibraryPage, reloadLibrary, reloadOverview, reloadSchedules, reloadTemplates]);
 
   const persistStarred = useCallback((ids: Set<string>) => {
     setStarredIds(ids);
@@ -411,7 +554,7 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         if (error instanceof ApiError && error.status === 404) {
           setHistory((prev) => prev.filter((row) => row.id !== id));
-          toast.success(`Deleted "${item.reportName}"`);
+          toast.success("Report deleted successfully");
           addActivity("export_completed", `Deleted report: ${item.reportName}`);
           return true;
         }
@@ -422,7 +565,7 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
         return false;
       }
       setHistory((prev) => prev.filter((row) => row.id !== id));
-      toast.success(`Deleted "${item.reportName}"`);
+      toast.success("Report deleted successfully");
       addActivity("export_completed", `Deleted report: ${item.reportName}`);
       return true;
     },
@@ -462,6 +605,31 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
 
   const runReportAgain = useCallback(
     async (report: ReportHistoryItem): Promise<GeneratedReportResult | null> => {
+      if (isDemoReportDataEnabled()) {
+        toast.success(`"${report.reportName}" re-run successfully`);
+        return {
+          reportName: report.reportName,
+          generatedTime: new Date().toLocaleString(),
+          records: report.records ?? 0,
+          fileSize: report.fileSize ?? "—",
+          exportFormat: "Excel (.xlsx)",
+          config: {
+            reportName: report.reportName,
+            templateId: report.type,
+            outputFormat: "xlsx",
+            outputFormatLabel: "Excel (.xlsx)",
+            datePreset: "ytd",
+            departments: [],
+            vendor: "All Vendors",
+            category: "All Categories",
+            amountMin: "",
+            amountMax: "",
+            approvalStatus: "All Statuses",
+            requestType: "All Types",
+            scheduleEnabled: false,
+          },
+        };
+      }
       const payload =
         buildGenerateReportRequestFromSaved(report) ??
         (report.runConfig ? buildGenerateReportRequest(report.runConfig) : null);
@@ -536,7 +704,39 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
       const seq = (previewRequestSeqRef.current[reportId] ?? 0) + 1;
       previewRequestSeqRef.current[reportId] = seq;
 
-      const item = history.find((row) => row.id === reportId);
+      // Use historyRef so this callback stays stable (no history dep).
+      // Keeping history in deps would recreate this function on every library reload,
+      // which would re-trigger the preview useEffect in ReportDetailPanel unnecessarily.
+      const item = historyRef.current.find((row) => row.id === reportId);
+
+      // In demo mode, serve built-in preview rows immediately — no API call needed.
+      if (isDemoReportDataEnabled()) {
+        const demo = DEMO_PREVIEW_DATA[reportId];
+        setReportPreviews((prev) => ({
+          ...prev,
+          [reportId]: demo
+            ? {
+                columns: demo.columns,
+                rows: demo.rows.slice((pageIndex - 1) * pageSize, pageIndex * pageSize),
+                totalCount: demo.totalCount,
+                pageIndex,
+                pageSize,
+                loading: false,
+                error: undefined,
+              }
+            : {
+                columns: [],
+                rows: [],
+                totalCount: 0,
+                pageIndex,
+                pageSize,
+                loading: false,
+                error: "Preview not available for this sample report.",
+              },
+        }));
+        return;
+      }
+
       setReportPreviews((prev) => ({
         ...prev,
         [reportId]: {
@@ -606,7 +806,7 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
         }));
       }
     },
-    [history],
+    [], // Stable: reads history via historyRef.current instead of closing over the state array.
   );
 
   const getHistoryItem = useCallback((id: string) => history.find((row) => row.id === id), [history]);
@@ -628,6 +828,12 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
       const item = history.find((row) => row.id === id);
       if (!item) {
         toast.error("Report not found");
+        return;
+      }
+      if (isDemoReportDataEnabled()) {
+        downloadReportAsCsv(item);
+        toast.success(`Downloaded "${item.reportName}" (CSV export)`);
+        addActivity("export_completed", `Downloaded: ${item.reportName}`);
         return;
       }
       try {
@@ -743,6 +949,41 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
 
   const addFromGeneration = useCallback(
     async (config: ReportRunConfig, result: GeneratedReportResult): Promise<string> => {
+      const payload = buildGenerateReportRequest(config);
+      const id = nextId("rpt");
+      const now = formatNow();
+
+      if (isDemoReportDataEnabled()) {
+        const optimistic = normalizeLibraryReportItem({
+          id,
+          reportName: result.reportName,
+          type: config.templateId,
+          owner: "—",
+          created: now,
+          lastRun: now,
+          status: "completed",
+          saved: true,
+          starred: false,
+          runConfig: config,
+          records: result.records,
+          fileSize: result.fileSize,
+          apiPayload: {
+            reportTemplateType: payload.ReportTemplateType,
+            basicFilters: payload.BasicFilters,
+            advancedFilters: payload.AdvancedFilters,
+          },
+        });
+        setHistory((prev) => [optimistic, ...prev]);
+        if (config.scheduleEnabled) {
+          toast.success("Report scheduled successfully");
+          addActivity("schedule_updated", `Scheduled "${result.reportName}" (${config.frequency})`);
+        } else {
+          toast.success("Report generated successfully");
+          addActivity("report_generated", `Generated "${result.reportName}" successfully`);
+        }
+        return id;
+      }
+
       try {
         await saveReport(buildSaveReportRequest(config));
       } catch (error) {
@@ -753,12 +994,30 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      const libraryOk = await reloadLibrary();
-      const created = historyRef.current.find((row) => row.reportName === result.reportName);
-      const id = created?.id ?? nextId("rpt");
+      const optimistic = normalizeLibraryReportItem({
+        id,
+        reportName: result.reportName,
+        type: config.templateId,
+        owner: "—",
+        created: now,
+        lastRun: now,
+        status: "completed",
+        saved: true,
+        starred: false,
+        runConfig: config,
+        records: result.records,
+        fileSize: result.fileSize,
+        apiPayload: {
+          reportTemplateType: payload.ReportTemplateType,
+          basicFilters: payload.BasicFilters,
+          advancedFilters: payload.AdvancedFilters,
+        },
+      });
+      setHistory((prev) => [optimistic, ...prev]);
+      setLibraryPageRows((prev) => [optimistic, ...prev.slice(0, 9)]);
+      setLibraryApiTotalCount((count) => count + 1);
 
       if (config.scheduleEnabled) {
-        await reloadSchedules();
         toast.success("Report scheduled successfully");
         addActivity("schedule_updated", `Scheduled "${result.reportName}" (${config.frequency})`);
       } else {
@@ -766,19 +1025,37 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
         addActivity("report_generated", `Generated "${result.reportName}" successfully`);
       }
 
-      if (!libraryOk) {
-        toast.warning("Report saved, but the library list couldn't be refreshed.");
-      }
+      // Refresh library in the background — do not block the wizard success step.
+      void (async () => {
+        const libraryOk = await reloadLibrary({ silent: true });
+        if (libraryOk) {
+          await fetchLibraryPage(1, "desc", { silent: true });
+        }
+        if (config.scheduleEnabled) {
+          await reloadSchedules({ silent: true });
+        }
+      })();
 
       return id;
     },
-    [addActivity, reloadLibrary, reloadSchedules],
+    [addActivity, fetchLibraryPage, reloadLibrary, reloadSchedules],
   );
 
   const pauseScheduled = useCallback(
     async (id: string) => {
       const schedule = scheduledReports.find((row) => row.id === id);
-      if (!schedule?.sequenceNumber) {
+      if (!schedule) return;
+      if (isDemoReportDataEnabled()) {
+        setScheduledReports((prev) =>
+          prev.map((row) =>
+            row.id === id ? { ...row, status: "paused", nextRun: "Paused" } : row,
+          ),
+        );
+        toast.success("Schedule paused");
+        addActivity("schedule_updated", "Schedule paused");
+        return;
+      }
+      if (!schedule.sequenceNumber) {
         toast.error("Cannot pause schedule: missing sequence number from API.");
         return;
       }
@@ -800,7 +1077,18 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
   const resumeScheduled = useCallback(
     async (id: string) => {
       const schedule = scheduledReports.find((row) => row.id === id);
-      if (!schedule?.sequenceNumber) {
+      if (!schedule) return;
+      if (isDemoReportDataEnabled()) {
+        setScheduledReports((prev) =>
+          prev.map((row) =>
+            row.id === id ? { ...row, status: "active", nextRun: "Jul 10, 2026 · 8:00 AM" } : row,
+          ),
+        );
+        toast.success("Schedule resumed");
+        addActivity("schedule_updated", "Schedule resumed");
+        return;
+      }
+      if (!schedule.sequenceNumber) {
         toast.error("Cannot resume schedule: missing sequence number from API.");
         return;
       }
@@ -827,6 +1115,15 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
       const schedule = scheduledReports.find((row) => row.id === id);
       if (!schedule) return false;
 
+      if (isDemoReportDataEnabled()) {
+        setScheduledReports((prev) =>
+          prev.map((row) => (row.id === id ? { ...row, ...patch } : row)),
+        );
+        toast.success("Schedule updated");
+        addActivity("schedule_updated", "Schedule settings updated");
+        return true;
+      }
+
       const recipients = patch.recipients
         .split(/[,;]+/)
         .map((entry) => entry.trim())
@@ -845,8 +1142,10 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
             ScheduleReport: {
               Frequency: patch.frequency.toLowerCase(),
               EmailReceipents: recipients,
-              DayOfWeek: "monday",
-              DayOfMonth: 1,
+              // Preserve the original DayOfWeek/DayOfMonth from the API response so
+              // editing frequency/recipients/timezone doesn't silently reset these fields.
+              DayOfWeek: schedule.dayOfWeek ?? "monday",
+              DayOfMonth: schedule.dayOfMonth ?? 1,
               Time: patch.deliveryTime ?? "",
               IsRescheduleMessage: false,
               TimeZoneId: patch.timezone ?? DEFAULT_TIMEZONE,
@@ -872,9 +1171,15 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       const item = scheduledReports.find((row) => row.id === id);
       if (!item) return;
+      if (isDemoReportDataEnabled()) {
+        setScheduledReports((prev) => prev.filter((row) => row.id !== id));
+        toast.success("Schedule removed");
+        addActivity("schedule_updated", `Removed schedule: ${item.reportName}`);
+        return;
+      }
       toast.error("Schedule deletion is not supported by the Report API.");
     },
-    [scheduledReports],
+    [addActivity, scheduledReports],
   );
 
   const getScheduleForReport = useCallback(
@@ -885,15 +1190,11 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
     [scheduledReports],
   );
 
+  const latestReportByTemplateId = useMemo(() => buildLatestReportByTemplateId(history), [history]);
+
   const findLatestReportByTemplateId = useCallback(
-    (templateId: string) =>
-      history.find(
-        (row) =>
-          row.runConfig?.templateId === templateId ||
-          row.apiPayload?.reportTemplateType === templateId ||
-          row.type === templateId,
-      ),
-    [history],
+    (templateId: string) => latestReportByTemplateId.get(templateId),
+    [latestReportByTemplateId],
   );
 
   const saveReportFromSuccess = useCallback(
@@ -925,6 +1226,8 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
   const value = useMemo<ReportsContextValue>(
     () => ({
       history,
+      libraryPageRows,
+      libraryApiTotalCount,
       scheduledReports,
       templateGroups,
       activity,
@@ -945,6 +1248,7 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
       addActivity,
       refreshOverview,
       reloadLibrary,
+      fetchLibraryPage,
       reloadSchedules,
       reloadTemplates,
       reloadOverview,
@@ -976,6 +1280,8 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
     }),
     [
       history,
+      libraryPageRows,
+      libraryApiTotalCount,
       scheduledReports,
       templateGroups,
       activity,
@@ -996,6 +1302,7 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
       addActivity,
       refreshOverview,
       reloadLibrary,
+      fetchLibraryPage,
       reloadSchedules,
       reloadTemplates,
       reloadOverview,

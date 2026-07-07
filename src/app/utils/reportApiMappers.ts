@@ -163,6 +163,15 @@ export function mapScheduledReportItem(item: ScheduledReportApiItem): ScheduledR
       : "") ||
     (typeof item.Time === "string" ? item.Time : "");
 
+  const dayOfWeek =
+    typeof delivery === "object" && delivery && "DayOfWeek" in delivery
+      ? String((delivery as { DayOfWeek?: string }).DayOfWeek ?? "")
+      : undefined;
+  const dayOfMonth =
+    typeof delivery === "object" && delivery && "DayOfMonth" in delivery
+      ? Number((delivery as { DayOfMonth?: number }).DayOfMonth ?? 1)
+      : undefined;
+
   return {
     id,
     reportName: item.ReportName ?? "Scheduled report",
@@ -183,6 +192,8 @@ export function mapScheduledReportItem(item: ScheduledReportApiItem): ScheduledR
         : typeof item.sequenceNumber === "number"
           ? item.sequenceNumber
           : undefined,
+    dayOfWeek: dayOfWeek || undefined,
+    dayOfMonth: dayOfMonth != null && !Number.isNaN(dayOfMonth) ? dayOfMonth : undefined,
   };
 }
 

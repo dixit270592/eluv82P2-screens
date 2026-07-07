@@ -43,7 +43,7 @@ export function ReportAttentionStrip({
   dismissed = false,
 }: ReportAttentionStripProps) {
   const { history, retryFailedReport, refreshKey } = useReports();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const failed = useMemo(() => history.filter((r) => r.status === "failed"), [history]);
   const running = useMemo(() => history.filter((r) => r.status === "running"), [history]);

@@ -91,6 +91,7 @@ export function ReportTemplateDrawer({
   const [generatedResult, setGeneratedResult] = useState<GeneratedReportResult | null>(null);
   const [generatedReportId, setGeneratedReportId] = useState<string | null>(null);
   const [isScheduling, setIsScheduling] = useState(scheduleMode);
+  const [isGenerating, setIsGenerating] = useState(false);
   const configureRef = useRef<ConfigureReportPanelHandle>(null);
 
   const handleClose = () => onOpenChange(false);
@@ -107,6 +108,7 @@ export function ReportTemplateDrawer({
       setRunConfig(null);
       setGeneratedResult(null);
       setGeneratedReportId(null);
+      setIsGenerating(false);
       return;
     }
 
@@ -115,9 +117,10 @@ export function ReportTemplateDrawer({
       setRunConfig(initialRunConfig);
       setGeneratedResult(null);
       setGeneratedReportId(null);
-      setStep("configure");
+      setStep((current) => (current === "generating" || current === "success" ? current : "configure"));
     } else {
       setStep("template");
+      setIsGenerating(false);
     }
     setIsScheduling(scheduleMode);
   }, [open, initialTemplate, initialRunConfig, scheduleMode]);
@@ -140,6 +143,7 @@ export function ReportTemplateDrawer({
   };
 
   const handleRunReport = async () => {
+    if (isGenerating) return;
     const validationError = configureRef.current?.validate();
     if (validationError) {
       toast.error(validationError);
@@ -150,6 +154,7 @@ export function ReportTemplateDrawer({
 
     setRunConfig(config);
     setGeneratedResult(null);
+    setIsGenerating(true);
     setStep("generating");
 
     try {
@@ -173,6 +178,8 @@ export function ReportTemplateDrawer({
       if (shouldToastReportApiFailure(error)) {
         toast.error(resolved.message);
       }
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -188,9 +195,11 @@ export function ReportTemplateDrawer({
       ? "Step 1 of 3 · Select template"
       : step === "configure"
         ? "Step 2 of 3 · Configure report"
-        : step === "success"
-          ? "Step 3 of 3 · Complete"
-          : undefined;
+        : step === "generating"
+          ? "Step 2 of 3 · Generating report"
+          : step === "success"
+            ? "Step 3 of 3 · Complete"
+            : undefined;
 
   const modalAriaLabel =
     step === "template"
@@ -206,15 +215,26 @@ export function ReportTemplateDrawer({
           : "Report generated";
 
   const modalTitle =
-    step === "template" && !scheduleMode && !initialRunConfig
-      ? "New Report"
-      : step === "configure" && initialRunConfig && !isScheduling
-        ? "Run Again"
-        : step === "configure" && isScheduling
-          ? "Schedule Report"
-          : headerCopy.title;
+    step === "generating"
+      ? drawerHeaderCopy.generating.title
+      : step === "success"
+        ? drawerHeaderCopy.success.title
+        : step === "template" && !scheduleMode && !initialRunConfig
+          ? "New Report"
+          : step === "configure" && initialRunConfig && !isScheduling
+            ? "Run Again"
+            : step === "configure" && isScheduling
+              ? "Schedule Report"
+              : headerCopy.title;
 
-  const modalSubtitle = step === "configure" ? configureSubtitle || headerCopy.subtitle : headerCopy.subtitle;
+  const modalSubtitle =
+    step === "generating"
+      ? drawerHeaderCopy.generating.subtitle
+      : step === "success"
+        ? drawerHeaderCopy.success.subtitle
+        : step === "configure"
+          ? configureSubtitle || headerCopy.subtitle
+          : headerCopy.subtitle;
 
   const backButton =
     step === "configure" && !initialRunConfig ? (
@@ -240,15 +260,16 @@ export function ReportTemplateDrawer({
       size="large"
       stepLabel={stepLabel}
       headerStart={backButton}
-      preventDismiss={step === "generating"}
-      bareFooter={step === "configure"}
+      preventDismiss={step === "generating" || isGenerating}
+      bareFooter={step === "configure" && !isGenerating}
       footer={
-        step === "configure" ? (
+        step === "configure" && !isGenerating ? (
           <ConfigureReportFooter
             onBack={() => setStep("template")}
             onCancel={handleClose}
             onRun={handleRunReport}
             scheduleMode={isScheduling}
+            isRunning={isGenerating}
           />
         ) : undefined
       }

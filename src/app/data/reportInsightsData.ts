@@ -3,6 +3,7 @@ import { reportOverviewByCategory } from "./reportOverviewData";
 
 export type InsightSummary = {
   id: string;
+  title: string;
   text: string;
   tone: "neutral" | "positive" | "warning";
 };
@@ -66,16 +67,19 @@ export const reportInsightsData: InsightsDashboardData = {
   summaryInsights: [
     {
       id: "budget-ops",
+      title: "Budget",
       text: "Operations at 92% budget — $24K remaining before fiscal close.",
       tone: "warning",
     },
     {
       id: "approval-speed",
+      title: "Approvals",
       text: "Approval flow is improving — Engineering and IT show the largest gains.",
       tone: "positive",
     },
     {
       id: "vendor-concentration",
+      title: "Vendor mix",
       text: "Dell and Microsoft remain the largest concentration risk in the vendor mix.",
       tone: "neutral",
     },

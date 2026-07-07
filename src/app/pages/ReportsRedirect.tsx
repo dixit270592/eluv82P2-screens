@@ -15,7 +15,7 @@ const LEGACY_SECTION_ROUTES: Record<string, string> = {
 };
 
 /**
- * Default landing: /reports → /reports/library (Library is the new home, not Overview/Insights).
+ * Default landing: /reports → /reports/insights.
  * Legacy query-param routes from the horizontal tab layout redirect gracefully:
  *   ?tab=0 → insights, ?tab=1 → library, ?tab=2 → schedules, ?tab=3 → templates
  *   ?section=insights|library|schedules|templates → same paths
@@ -33,5 +33,5 @@ export function ReportsRedirect() {
     return <Navigate to={LEGACY_SECTION_ROUTES[section]} replace />;
   }
 
-  return <Navigate to="/reports/library" replace />;
+  return <Navigate to="/reports/insights" replace />;
 }

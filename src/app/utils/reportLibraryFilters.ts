@@ -4,7 +4,7 @@ import { parseReportDate } from "./reportRunConfigUtils";
 
 export const RECENT_REPORT_DAYS = 30;
 
-export type LibraryDateFilter = "all" | "today" | "this_week" | "this_month" | "this_quarter";
+export type LibraryDateFilter = "all" | "today" | "this_week" | "this_month" | "this_quarter" | "this_year";
 
 export type LibraryToolbarFilters = {
   type: string;
@@ -63,6 +63,10 @@ export function isWithinDateFilter(
     const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
     const quarterStart = new Date(now.getFullYear(), quarterStartMonth, 1);
     return date >= quarterStart && date <= endOfToday;
+  }
+
+  if (filter === "this_year") {
+    return date.getFullYear() === now.getFullYear();
   }
 
   return true;

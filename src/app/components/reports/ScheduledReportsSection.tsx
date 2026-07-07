@@ -1,4 +1,4 @@
-import { CalendarClock, Edit3, Pause, Play, Plus, Trash2, Users } from "lucide-react";
+import { CalendarClock, Edit3, Pause, Play, Trash2, Users } from "lucide-react";
 
 import { useEffect, useState } from "react";
 
@@ -88,29 +88,21 @@ export function ScheduledReportsSection({
 
       <div style={reportCardShellStyle}>
 
-        <div className="app-report-schedule-card__header">
+        <div className="app-report-schedule-card__header app-report-schedule-card__header--compact">
 
-          <div>
-
-            <div className="app-report-schedule-card__title">Scheduled Reports</div>
-
-            <div className="app-report-schedule-card__subtitle">Reports set to run automatically on a recurring schedule</div>
-
+          <div className="app-report-schedule-card__stats">
+            <span className="app-report-schedule-card__stat">
+              <strong>{scheduledReports.length}</strong> total
+            </span>
+            <span className="app-report-schedule-card__stat">
+              <strong>{activeCount}</strong> active
+            </span>
+            {pausedCount > 0 && (
+              <span className="app-report-schedule-card__stat app-report-schedule-card__stat--muted">
+                <strong>{pausedCount}</strong> paused
+              </span>
+            )}
           </div>
-
-          <button
-
-            type="button"
-
-            onClick={onScheduleNew}
-
-            className="app-report-header-btn app-report-header-btn--primary"
-
-          >
-
-            <Plus size={13} aria-hidden /> Schedule Report
-
-          </button>
 
         </div>
 

@@ -163,33 +163,33 @@ export function ReportTemplatesSection({
                           )}
                         </div>
                         <p className="app-report-template-card__desc">{template.description}</p>
-                        {latestRun && (
-                          <div className="app-report-template-card__meta">
-                            <span className="app-report-template-last-run">Last run: {latestRun.lastRun}</span>
-                            {onViewReportOutput && (
-                              <button
-                                type="button"
-                                onClick={() => onViewReportOutput(latestRun.id)}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "4px",
-                                  border: "none",
-                                  background: "transparent",
-                                  padding: 0,
-                                  fontSize: "11px",
-                                  fontWeight: 500,
-                                  color: "#1FA97A",
-                                  cursor: "pointer",
-                                  fontFamily: reportFont,
-                                }}
-                              >
-                                <ExternalLink size={11} aria-hidden />
-                                View output
-                              </button>
+                        {visibleTags.length > 0 && (
+                          <div className="app-report-template-card__tags">
+                            {visibleTags.map((tag) => (
+                              <span key={tag} className="app-report-template-param-tag">{tag}</span>
+                            ))}
+                            {extraTags > 0 && (
+                              <span className="app-report-template-param-tag app-report-template-param-tag--more">
+                                +{extraTags} more
+                              </span>
                             )}
                           </div>
                         )}
+                        <div className="app-report-template-card__meta">
+                          <span className="app-report-template-last-run">
+                            Last run: {latestRun?.lastRun ?? "—"}
+                          </span>
+                          {latestRun && onViewReportOutput && (
+                            <button
+                              type="button"
+                              onClick={() => onViewReportOutput(latestRun.id)}
+                              className="app-report-template-view-output"
+                            >
+                              <ExternalLink size={11} aria-hidden />
+                              View output
+                            </button>
+                          )}
+                        </div>
                       </div>
                       {isClone && (
                         <button
@@ -204,13 +204,6 @@ export function ReportTemplatesSection({
                         </button>
                       )}
                     </div>
-
-                    {visibleTags.length > 0 && (
-                      <div className="app-report-template-card__tags">
-                        {visibleTags.join(" · ")}
-                        {extraTags > 0 && ` · +${extraTags} more`}
-                      </div>
-                    )}
 
                     <div className="app-report-template-card__actions">
                       <button
