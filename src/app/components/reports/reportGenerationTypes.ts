@@ -5,6 +5,8 @@ export type ReportRunConfig = {
   outputFormat: string;
   outputFormatLabel: string;
   datePreset: string;
+  customStartDate?: string;
+  customEndDate?: string;
   departments: string[];
   vendor: string;
   category: string;
@@ -12,6 +14,10 @@ export type ReportRunConfig = {
   amountMax: string;
   approvalStatus: string;
   requestType: string;
+  includeRejectedItems?: boolean;
+  processingTimeMin?: string;
+  processingTimeMax?: string;
+  emailOnGenerate?: boolean;
   scheduleEnabled: boolean;
   frequency?: string;
   recipients?: string;

@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Sidebar } from "../components/Sidebar";
 import { TopHeader } from "../components/TopHeader";
 import { SkipToMainContent } from "../components/SkipToMainContent";
-import { ReportTemplateDrawer } from "../components/reports/ReportTemplateDrawer";
+import { CreateReportFlow } from "../components/reports/CreateReportFlow";
 import { ReportCenterNav, type LibraryCollection, type ReportCenterSection } from "../components/reports/ReportCenterNav";
 import { ReportLibrarySection } from "../components/reports/ReportLibrarySection";
 import { ReportsInsightsSection } from "../components/reports/ReportsInsightsSection";
@@ -55,10 +55,10 @@ function ReportsPageInner() {
   const libraryCollection = routeState.collection;
   const selectedReportId = routeState.reportId;
 
-  const [templateDrawerOpen, setTemplateDrawerOpen] = useState(false);
-  const [templateScheduleMode, setTemplateScheduleMode] = useState(false);
+  const [createFlowOpen, setCreateFlowOpen] = useState(false);
   const [initialTemplate, setInitialTemplate] = useState<ReportTemplate | null>(null);
   const [initialRunConfig, setInitialRunConfig] = useState<ReportRunConfig | null>(null);
+  const [defaultScheduleEnabled, setDefaultScheduleEnabled] = useState(false);
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
 
   const editingSchedule = useMemo(
@@ -85,10 +85,10 @@ function ReportsPageInner() {
     recent: collectionCounts.recent,
   };
 
-  const resetDrawerState = useCallback(() => {
+  const resetCreateFlowState = useCallback(() => {
     setInitialTemplate(null);
     setInitialRunConfig(null);
-    setTemplateScheduleMode(false);
+    setDefaultScheduleEnabled(false);
   }, []);
 
   const navigateToSection = useCallback(
@@ -117,36 +117,36 @@ function ReportsPageInner() {
     [navigate, libraryCollection],
   );
 
-  const openGenerateReport = useCallback(() => {
-    resetDrawerState();
-    setTemplateDrawerOpen(true);
-  }, [resetDrawerState]);
-
-  const openScheduleReport = useCallback(
-    (prefill?: ReportRunConfig | null) => {
+  const openCreateReport = useCallback(
+    (options?: {
+      template?: ReportTemplate | null;
+      prefill?: ReportRunConfig | null;
+      scheduleEnabled?: boolean;
+    }) => {
+      const prefill = options?.prefill;
+      if (options?.template) {
+        setInitialTemplate(options.template);
+        setInitialRunConfig(prefill ?? null);
+        setDefaultScheduleEnabled(options.scheduleEnabled ?? prefill?.scheduleEnabled ?? false);
+        setCreateFlowOpen(true);
+        return;
+      }
       if (prefill?.templateId) {
         const template = findTemplateById(prefill.templateId, templateGroups);
         if (template) {
           setInitialTemplate(template);
-          setInitialRunConfig({ ...prefill, scheduleEnabled: true });
-          setTemplateScheduleMode(true);
-          setTemplateDrawerOpen(true);
+          setInitialRunConfig({ ...prefill, scheduleEnabled: options?.scheduleEnabled ?? prefill.scheduleEnabled ?? true });
+          setDefaultScheduleEnabled(options?.scheduleEnabled ?? true);
+          setCreateFlowOpen(true);
           return;
         }
       }
-      resetDrawerState();
-      setTemplateScheduleMode(true);
-      setTemplateDrawerOpen(true);
+      resetCreateFlowState();
+      setDefaultScheduleEnabled(options?.scheduleEnabled ?? false);
+      setCreateFlowOpen(true);
     },
-    [resetDrawerState, templateGroups],
+    [resetCreateFlowState, templateGroups],
   );
-
-  const openTemplate = useCallback((template: ReportTemplate) => {
-    setInitialTemplate(template);
-    setInitialRunConfig(null);
-    setTemplateScheduleMode(false);
-    setTemplateDrawerOpen(true);
-  }, []);
 
   const handleRunAgain = useCallback((report: ReportHistoryItem) => {
     const config = getReportRunConfig(report);
@@ -158,8 +158,8 @@ function ReportsPageInner() {
       }
       setInitialTemplate(template);
       setInitialRunConfig({ ...config, scheduleEnabled: false });
-      setTemplateScheduleMode(false);
-      setTemplateDrawerOpen(true);
+      setDefaultScheduleEnabled(false);
+      setCreateFlowOpen(true);
       return;
     }
     // No saved runConfig — try to match a template by report type name so the
@@ -170,17 +170,17 @@ function ReportsPageInner() {
     ) ?? allTemplates[0] ?? null;
     setInitialTemplate(matched);
     setInitialRunConfig(null);
-    setTemplateScheduleMode(false);
-    setTemplateDrawerOpen(true);
+    setDefaultScheduleEnabled(false);
+    setCreateFlowOpen(true);
   }, [templateGroups]);
 
   const handleReportGenerated = useCallback(
     (reportId: string) => {
       navigate(buildReportCenterPath("library", { reportId, collection: "all" }));
-      setTemplateDrawerOpen(false);
-      resetDrawerState();
+      setCreateFlowOpen(false);
+      resetCreateFlowState();
     },
-    [navigate, resetDrawerState],
+    [navigate, resetCreateFlowState],
   );
 
   const handleEditSchedule = useCallback((scheduleId: string) => {
@@ -191,14 +191,14 @@ function ReportsPageInner() {
     (report: ReportHistoryItem) => {
       const schedule = getScheduleForReport(report.id, report.reportName);
       if (schedule) setEditingScheduleId(schedule.id);
-      else openScheduleReport(getReportRunConfig(report));
+      else openCreateReport({ prefill: getReportRunConfig(report), scheduleEnabled: true });
     },
-    [getScheduleForReport, openScheduleReport],
+    [getScheduleForReport, openCreateReport],
   );
 
-  const handleTemplateDrawerChange = (open: boolean) => {
-    setTemplateDrawerOpen(open);
-    if (!open) resetDrawerState();
+  const handleCreateFlowChange = (open: boolean) => {
+    setCreateFlowOpen(open);
+    if (!open) resetCreateFlowState();
   };
 
   const headerCopy = sectionTitles[activeSection];
@@ -217,15 +217,9 @@ function ReportsPageInner() {
               </h1>
             </div>
             <div className="app-report-page__actions">
-              {activeSection === "schedules" ? (
-                <button type="button" onClick={() => openScheduleReport()} className="app-report-header-btn app-report-header-btn--primary">
-                  <Plus size={13} aria-hidden /> Schedule Report
-                </button>
-              ) : (
-                <button type="button" onClick={openGenerateReport} className="app-report-header-btn app-report-header-btn--primary">
-                  <Plus size={13} aria-hidden /> New Report
-                </button>
-              )}
+              <button type="button" onClick={() => openCreateReport()} className="app-report-header-btn app-report-header-btn--primary">
+                <Plus size={13} aria-hidden /> New Report
+              </button>
             </div>
           </div>
 
@@ -246,11 +240,11 @@ function ReportsPageInner() {
                   collection={libraryCollection}
                   selectedReportId={selectedReportId}
                   onSelectReport={navigateToReport}
-                  onGenerateReport={openGenerateReport}
+                  onGenerateReport={() => openCreateReport()}
                   onScheduleReport={() => {
                     const report = history.find((r) => r.id === selectedReportId);
                     if (report) handleEditScheduleFromReport(report);
-                    else openScheduleReport();
+                    else openCreateReport({ scheduleEnabled: true });
                   }}
                   onRunAgain={handleRunAgain}
                   onEditSchedule={handleEditSchedule}
@@ -261,14 +255,14 @@ function ReportsPageInner() {
 
               {activeSection === "schedules" && (
                 <ScheduledReportsSection
-                  onScheduleNew={() => openScheduleReport()}
+                  onScheduleNew={() => openCreateReport({ scheduleEnabled: true })}
                   onEditSchedule={handleEditSchedule}
                 />
               )}
 
               {activeSection === "templates" && (
                 <ReportTemplatesSection
-                  onRunTemplate={openTemplate}
+                  onRunTemplate={(template) => openCreateReport({ template })}
                   onViewReportOutput={(reportId) =>
                     navigate(buildReportCenterPath("library", { reportId, collection: "all" }))
                   }
@@ -281,10 +275,10 @@ function ReportsPageInner() {
         </main>
       </div>
 
-      <ReportTemplateDrawer
-        open={templateDrawerOpen}
-        onOpenChange={handleTemplateDrawerChange}
-        scheduleMode={templateScheduleMode}
+      <CreateReportFlow
+        open={createFlowOpen}
+        onOpenChange={handleCreateFlowChange}
+        defaultScheduleEnabled={defaultScheduleEnabled}
         initialTemplate={initialTemplate}
         initialRunConfig={initialRunConfig}
         onReportGenerated={handleReportGenerated}

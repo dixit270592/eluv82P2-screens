@@ -14,6 +14,7 @@ import type {
 } from "../types/reportApi";
 import type { PreviewColumn, PreviewRow } from "./reportPreviewData";
 import { dateRangePresets } from "../data/reportConfigureOptions";
+import { resolveConfigureDateRange } from "./reportConfigureDateRange";
 import { mapSavedReportStatus } from "./reportStatusUtils";
 
 export type OverviewKpiCounts = {
@@ -261,6 +262,7 @@ function mapSavedReportToRunConfig(item: SavedReportApiItem): ReportRunConfig | 
   if (!item.ReportTemplateType && !item.BasicFilters) return undefined;
 
   const basic = item.BasicFilters;
+  const advanced = item.AdvancedFilters;
   const delivery = item.DelieveryOptions;
 
   return {
@@ -270,13 +272,19 @@ function mapSavedReportToRunConfig(item: SavedReportApiItem): ReportRunConfig | 
     outputFormat: "xlsx",
     outputFormatLabel: "Excel (.xlsx)",
     datePreset: inferDatePreset(basic),
+    customStartDate: basic?.StartDate ?? undefined,
+    customEndDate: basic?.EndDate ?? undefined,
     departments: basic?.Departments ?? [],
     vendor: basic?.Vendor?.[0] ?? "All Vendors",
-    category: "All Categories",
+    category: basic?.GLAccounts?.[0] ?? "All Categories",
     amountMin: basic?.MinAmount != null ? String(basic.MinAmount) : "",
     amountMax: basic?.MaxAmount != null ? String(basic.MaxAmount) : "",
     approvalStatus: basic?.RequestStatus?.[0] ?? "All Statuses",
     requestType: basic?.RequestType?.[0] ?? "All Types",
+    includeRejectedItems: advanced?.IncludeRejectedItems ?? false,
+    processingTimeMin: advanced?.ProcessingTime?.minTime ?? "",
+    processingTimeMax: advanced?.ProcessingTime?.maxTime ?? "",
+    emailOnGenerate: delivery?.IsEmail ?? false,
     scheduleEnabled: delivery?.IsScheduleReport ?? false,
     frequency: delivery?.ScheduleReport?.Frequency,
     recipients: (delivery?.EmailReceipents ?? delivery?.ScheduleReport?.EmailReceipents ?? []).join(", "),
@@ -287,7 +295,13 @@ function mapSavedReportToRunConfig(item: SavedReportApiItem): ReportRunConfig | 
 
 function inferDatePreset(basic?: BasicFiltersApi): string {
   if (!basic?.StartDate && !basic?.EndDate) return "ytd";
-  return dateRangePresets.find((preset) => preset.id === "custom")?.id ?? "ytd";
+  for (const preset of dateRangePresets) {
+    const range = resolveConfigureDateRange(preset.id);
+    if (range.start === basic.StartDate && range.end === basic.EndDate) {
+      return preset.id;
+    }
+  }
+  return "ytd";
 }
 
 export function mapGenerateReportPreview(data: GenerateReportApiData): {

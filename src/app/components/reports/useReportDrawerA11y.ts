@@ -19,7 +19,12 @@ export function usePrefersReducedMotion() {
   return ref;
 }
 
-export function useReportDrawerA11y(open: boolean, onClose: () => void, panelRef: React.RefObject<HTMLElement | null>) {
+export function useReportDrawerA11y(
+  open: boolean,
+  onClose: () => void,
+  panelRef: React.RefObject<HTMLElement | null>,
+  canDismiss: boolean = true,
+) {
   useEffect(() => {
     if (!open) return;
 
@@ -28,6 +33,7 @@ export function useReportDrawerA11y(open: boolean, onClose: () => void, panelRef
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (!canDismiss) return;
         e.preventDefault();
         onClose();
       }
@@ -60,5 +66,5 @@ export function useReportDrawerA11y(open: boolean, onClose: () => void, panelRef
       window.removeEventListener("keydown", onKey);
       window.clearTimeout(timer);
     };
-  }, [open, onClose, panelRef]);
+  }, [open, onClose, panelRef, canDismiss]);
 }

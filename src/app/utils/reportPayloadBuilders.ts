@@ -1,5 +1,5 @@
 import type { ReportRunConfig } from "../components/reports/reportGenerationTypes";
-import { getDateRangeBounds, type PageDateRange } from "./reportDateRange";
+import { resolveConfigureDateRange } from "./reportConfigureDateRange";
 import type {
   AdvancedFiltersApi,
   BasicFiltersApi,
@@ -15,16 +15,8 @@ import {
   emptyDelieveryOptions,
 } from "../types/reportApi";
 
-function toIsoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-function resolveDateRange(preset: string): { start: string; end: string } {
-  const bounds = getDateRangeBounds(preset as PageDateRange);
-  return {
-    start: toIsoDate(bounds.start),
-    end: toIsoDate(bounds.end),
-  };
+function resolveDateRange(config: ReportRunConfig): { start: string; end: string } {
+  return resolveConfigureDateRange(config.datePreset, config.customStartDate, config.customEndDate);
 }
 
 function parseRecipients(value?: string): string[] {
@@ -40,8 +32,14 @@ function mapFrequency(value?: string): string {
   return value.toLowerCase();
 }
 
+/** Strip display suffix e.g. "America/New_York (ET)" → "America/New_York" */
+export function normalizeTimezoneId(value?: string): string {
+  if (!value?.trim()) return DEFAULT_TIMEZONE;
+  return value.replace(/\s*\([^)]*\)\s*$/, "").trim() || DEFAULT_TIMEZONE;
+}
+
 export function buildBasicFiltersFromConfig(config: ReportRunConfig): BasicFiltersApi {
-  const range = resolveDateRange(config.datePreset);
+  const range = resolveDateRange(config);
   const filters = emptyBasicFilters();
   filters.StartDate = range.start;
   filters.EndDate = range.end;
@@ -57,21 +55,28 @@ export function buildBasicFiltersFromConfig(config: ReportRunConfig): BasicFilte
   if (config.approvalStatus && config.approvalStatus !== "All Statuses") {
     filters.RequestStatus = [config.approvalStatus];
   }
+  if (config.category && config.category !== "All Categories") {
+    filters.GLAccounts = [config.category];
+  }
   return filters;
 }
 
-export function buildAdvancedFiltersFromConfig(_config: ReportRunConfig): AdvancedFiltersApi {
-  return {
-    ...emptyAdvancedFilters(),
-    RejectReasons: { ...DEFAULT_REJECT_REASONS },
+export function buildAdvancedFiltersFromConfig(config: ReportRunConfig): AdvancedFiltersApi {
+  const filters = emptyAdvancedFilters();
+  filters.IncludeRejectedItems = config.includeRejectedItems ?? false;
+  filters.ProcessingTime = {
+    minTime: config.processingTimeMin ?? "",
+    maxTime: config.processingTimeMax ?? "",
   };
+  filters.RejectReasons = { ...DEFAULT_REJECT_REASONS };
+  return filters;
 }
 
 export function buildDelieveryOptionsFromConfig(config: ReportRunConfig): DelieveryOptionsApi {
   const options = emptyDelieveryOptions();
   const recipients = parseRecipients(config.recipients);
   options.IsScheduleReport = config.scheduleEnabled;
-  options.IsEmail = recipients.length > 0 && !config.scheduleEnabled;
+  options.IsEmail = (config.emailOnGenerate ?? false) || (recipients.length > 0 && !config.scheduleEnabled);
   options.EmailReceipents = recipients;
   options.ScheduleReport = {
     Frequency: mapFrequency(config.frequency),
@@ -80,7 +85,7 @@ export function buildDelieveryOptionsFromConfig(config: ReportRunConfig): Deliev
     DayOfMonth: 1,
     Time: config.deliveryTime ?? "",
     IsRescheduleMessage: false,
-    TimeZoneId: config.timezone ?? DEFAULT_TIMEZONE,
+    TimeZoneId: normalizeTimezoneId(config.timezone),
   };
   return options;
 }
@@ -89,7 +94,7 @@ export function buildGenerateReportRequest(config: ReportRunConfig): GenerateRep
   return {
     ReportName: config.reportName,
     ReportTemplateType: config.templateId,
-    UserTimeZoneId: config.timezone ?? DEFAULT_TIMEZONE,
+    UserTimeZoneId: normalizeTimezoneId(config.timezone),
     BasicFilters: buildBasicFiltersFromConfig(config),
     AdvancedFilters: buildAdvancedFiltersFromConfig(config),
   };

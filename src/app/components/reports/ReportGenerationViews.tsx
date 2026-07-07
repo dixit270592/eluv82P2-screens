@@ -159,13 +159,13 @@ export function ReportSuccessPanel({
   onClose,
   onViewInLibrary,
   scheduleMode = false,
-  onScheduleAgain,
+  alreadySaved = false,
 }: {
   result: GeneratedReportResult;
   onClose: () => void;
   onViewInLibrary?: () => void;
   scheduleMode?: boolean;
-  onScheduleAgain?: () => void;
+  alreadySaved?: boolean;
 }) {
   const { downloadGenerated, saveReportFromSuccess } = useReports();
   const reducedMotion = useReportReducedMotion();
@@ -241,43 +241,52 @@ export function ReportSuccessPanel({
           <Eye size={14} aria-hidden />
           View in Library
         </button>
-        <button
-          type="button"
-          style={primaryActionBtnStyle}
-          aria-label="Download report"
-          onClick={() => downloadGenerated(result)}
-          onMouseEnter={(e) => onPrimaryBtnHover(e, true)}
-          onMouseLeave={(e) => onPrimaryBtnHover(e, false)}
-        >
-          <Download size={14} aria-hidden />
-          Download
-        </button>
+        {!scheduleMode && (
+          <button
+            type="button"
+            style={primaryActionBtnStyle}
+            aria-label="Download report"
+            onClick={() => downloadGenerated(result)}
+            onMouseEnter={(e) => onPrimaryBtnHover(e, true)}
+            onMouseLeave={(e) => onPrimaryBtnHover(e, false)}
+          >
+            <Download size={14} aria-hidden />
+            Download
+          </button>
+        )}
       </div>
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 1fr",
+          gridTemplateColumns: alreadySaved ? "1fr" : "1fr 1fr",
           gap: "8px",
         }}
       >
-        {[
-          { label: "Save Report", icon: <Bookmark size={13} color="#667085" aria-hidden />, onClick: () => saveReportFromSuccess(result) },
-          { label: "Close", icon: <X size={13} color="#667085" aria-hidden />, onClick: onClose },
-        ].map((action) => (
+        {!alreadySaved && (
           <button
-            key={action.label}
             type="button"
             style={secondaryActionBtnStyle}
-            aria-label={action.label}
-            onClick={action.onClick}
+            aria-label="Save report"
+            onClick={() => saveReportFromSuccess(result)}
             onMouseEnter={(e) => onIconBtnHover(e, true)}
             onMouseLeave={(e) => onIconBtnHover(e, false)}
           >
-            {action.icon}
-            {action.label}
+            <Bookmark size={13} color="#667085" aria-hidden />
+            Save Report
           </button>
-        ))}
+        )}
+        <button
+          type="button"
+          style={secondaryActionBtnStyle}
+          aria-label="Close"
+          onClick={onClose}
+          onMouseEnter={(e) => onIconBtnHover(e, true)}
+          onMouseLeave={(e) => onIconBtnHover(e, false)}
+        >
+          <X size={13} color="#667085" aria-hidden />
+          Close
+        </button>
       </div>
     </motion.div>
   );

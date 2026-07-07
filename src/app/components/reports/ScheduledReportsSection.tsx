@@ -134,7 +134,7 @@ export function ScheduledReportsSection({
 
             description="Set up automated reports to be delivered on a recurring schedule."
 
-            action={{ label: "Schedule Report", onClick: onScheduleNew }}
+            action={{ label: "New Report", onClick: onScheduleNew }}
 
           />
 
