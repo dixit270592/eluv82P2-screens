@@ -4,6 +4,16 @@ import { parseReportDate } from "./reportRunConfigUtils";
 
 export const RECENT_REPORT_DAYS = 30;
 
+export const LIBRARY_COLLECTION_LABELS: Record<LibraryCollection, string> = {
+  all: "All Reports",
+  recent: "Recent",
+  saved: "Saved",
+  starred: "Starred",
+  running: "Running",
+  scheduled: "Scheduled",
+  failed: "Failed",
+};
+
 export type LibraryDateFilter = "all" | "today" | "this_week" | "this_month" | "this_quarter" | "this_year";
 
 export type LibraryToolbarFilters = {

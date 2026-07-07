@@ -256,15 +256,6 @@ function ReportsPageInner() {
                   onEditSchedule={handleEditSchedule}
                   onNavigateToSchedules={() => navigate(buildReportCenterPath("schedules"))}
                   onNavigateToCollection={navigateToCollection}
-                  collectionCounts={{
-                    all: collectionCounts.library,
-                    recent: collectionCounts.recent,
-                    saved: collectionCounts.saved,
-                    starred: collectionCounts.starred,
-                    running: collectionCounts.running,
-                    scheduled: collectionCounts.scheduled,
-                    failed: collectionCounts.failed,
-                  }}
                 />
               )}
 

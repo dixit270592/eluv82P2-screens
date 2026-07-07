@@ -16,7 +16,6 @@ import {
 import type { ReportHistoryItem, ReportHistoryStatus } from "../../data/reportHistory";
 import { useReports } from "../../context/ReportsContext";
 import type { LibraryCollection } from "./ReportCenterNav";
-import { LibraryCollectionPills, LIBRARY_COLLECTION_LABELS } from "./LibraryCollectionPills";
 import { ReportAttentionStrip } from "./ReportAttentionStrip";
 import { ReportDeleteConfirmDialog } from "./ReportDeleteConfirmDialog";
 import { ReportSectionErrorBanner } from "./ReportSectionErrorBanner";
@@ -31,6 +30,7 @@ import {
   EMPTY_LIBRARY_FILTERS,
   filterLibraryReports,
   hasActiveLibraryFilters,
+  LIBRARY_COLLECTION_LABELS,
   type LibraryDateFilter,
   type LibraryToolbarFilters,
 } from "../../utils/reportLibraryFilters";
@@ -75,7 +75,6 @@ type ReportLibrarySectionProps = {
   onEditSchedule?: (scheduleId: string) => void;
   onNavigateToSchedules?: () => void;
   onNavigateToCollection?: (collection: LibraryCollection) => void;
-  collectionCounts: Partial<Record<LibraryCollection, number>>;
 };
 
 function sortReports(rows: ReportHistoryItem[], field: LibrarySortField, dir: "asc" | "desc"): ReportHistoryItem[] {
@@ -195,7 +194,6 @@ export function ReportLibrarySection({
   onEditSchedule,
   onNavigateToSchedules,
   onNavigateToCollection,
-  collectionCounts,
 }: ReportLibrarySectionProps) {
   const {
     history,
@@ -410,12 +408,6 @@ export function ReportLibrarySection({
 
       <div className="app-report-library-layout">
         <div className="app-report-library-card">
-          <LibraryCollectionPills
-            active={collection}
-            onChange={(c) => onNavigateToCollection?.(c)}
-            counts={collectionCounts}
-          />
-
           <div className="app-report-library-toolbar">
             <div className="app-report-library-toolbar__primary">
               <span className="app-report-library-toolbar__count">
