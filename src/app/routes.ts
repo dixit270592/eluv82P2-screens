@@ -34,6 +34,8 @@ import { ShippingMethodSetup } from './pages/setup/ShippingMethodSetup';
 import { PurchaseOrderTemplateSettings } from './pages/setup/PurchaseOrderTemplateSettings';
 import { PurchaseOrderTemplatePreview } from './pages/setup/PurchaseOrderTemplatePreview';
 import { GeneratePurchaseOrder } from './pages/po/GeneratePurchaseOrder';
+import { Reports } from './pages/Reports';
+import { ReportsRedirect } from './pages/ReportsRedirect';
 
 /** Must match Vite `base` (GitHub project site: /repo-name/ → basename /repo-name). */
 function routerBasename(): string | undefined {
@@ -169,6 +171,26 @@ export const router = createBrowserRouter(
           {
             path: '/purchase-orders/generate',
             Component: GeneratePurchaseOrder,
+          },
+          {
+            path: '/reports',
+            Component: ReportsRedirect,
+          },
+          {
+            path: '/reports/library/:reportId?',
+            Component: Reports,
+          },
+          {
+            path: '/reports/schedules',
+            Component: Reports,
+          },
+          {
+            path: '/reports/templates',
+            Component: Reports,
+          },
+          {
+            path: '/reports/insights',
+            Component: Reports,
           },
         ],
       },

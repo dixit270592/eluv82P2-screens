@@ -27,6 +27,18 @@ export default defineConfig({
     host: true,
     port: 5173,
     strictPort: true,
+    proxy: {
+      "/api": {
+        target: process.env.VITE_API_PROXY_TARGET ?? "https://elementspoapi-staging.azurewebsites.net",
+        changeOrigin: true,
+        secure: true,
+        // Rewrite Set-Cookie domain from the upstream API host to localhost so session
+        // cookies are accessible during local development (credentials: "include").
+        cookieDomainRewrite: {
+          "elementspoapi-staging.azurewebsites.net": "localhost",
+        },
+      },
+    },
     // Prevent browser / Cursor Simple Browser from serving stale bundles in dev.
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate',

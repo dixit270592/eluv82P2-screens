@@ -7,7 +7,7 @@ const avatarNav = [
   { label: 'Pr', bg: '#E8956D', title: 'Purchase Requests', path: '/purchase-requests' },
   { label: 'Nv', bg: '#1A7A6E', title: 'Vendors', path: '#' },
   { label: 'Xp', bg: '#7B5EA7', title: 'Expenses', path: '#' },
-  { label: 'Ro', bg: '#2887C8', title: 'Reports', path: '#' },
+  { label: 'Ro', bg: '#2887C8', title: 'Reports', path: '/reports' },
 ];
 
 export function Sidebar() {
@@ -64,7 +64,7 @@ export function Sidebar() {
       {/* Avatar nav items */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', flex: 1 }}>
         {avatarNav.map((item) => {
-          const active = item.path !== '#' && (pathname === item.path || (item.path === '/purchase-requests' && pathname.startsWith('/pr')));
+          const active = item.path !== '#' && (pathname === item.path || (item.path === '/purchase-requests' && pathname.startsWith('/pr')) || (item.path === '/reports' && pathname.startsWith('/reports')));
           return (
             <button
               key={item.label}

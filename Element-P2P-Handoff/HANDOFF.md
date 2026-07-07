@@ -112,7 +112,7 @@ Element-P2P-Handoff/
 | `/presentation` | Public | `src/app/pages/ClientPresentation.tsx` | Client walkthrough navigator |
 | `/upload-split` | Public | `src/app/pages/UploadSplit.tsx` | PDF upload & split workflow |
 | `/` | Auth | `src/app/pages/Dashboard.tsx` | Dashboard with analytics, PR list, punchout |
-| `/purchase-requests` | Auth | `src/app/pages/PurchaseRequests.tsx` | PR list with filters & starred |
+| `/reports` | Auth | `src/app/pages/Reports.tsx` | Reports hub: overview analytics, saved/scheduled reports, templates, generation drawer |
 | `/pr/:prId` | Auth | `src/app/pages/MainPurchaseRequest.tsx` | PR detail wrapper → V2 |
 | `*` | — | `src/app/components/auth/RedirectHome.tsx` | Catch-all → `/` |
 
@@ -158,6 +158,7 @@ Element-P2P-Handoff/
 |--------|---------|--------|--------|
 | Auth (Login/Signup/Forgot) | ✅ Full split layout | ✅ Stacked layout | ✅ Single column |
 | Dashboard | ✅ Full layout | ⚠️ Partial (fixed widths on some panels) | ⚠️ Sidebar collapses; some panels fixed-width |
+| Reports | ✅ Full layout | ✅ Responsive overview (stacked nav, scroll tables) | ✅ Summary cards + tab scroll |
 | Purchase Requests | ✅ Full table | ⚠️ Table scroll | ⚠️ Horizontal scroll |
 | PR Detail (V2) | ✅ Full workspace | ⚠️ Fixed layout | ⚠️ Fixed layout (dev integration needed) |
 | Client Presentation | ✅ Side nav + content | ⚠️ Sticky nav | ⚠️ Fixed 260px sidebar |
