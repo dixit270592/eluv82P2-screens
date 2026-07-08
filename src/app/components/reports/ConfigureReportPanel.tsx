@@ -41,9 +41,9 @@ const inputFocusHandlers = {
 };
 
 const CONFIG_TABS: { id: ConfigureTab; label: string }[] = [
-  { id: "basic", label: "Basic Filters" },
-  { id: "advanced", label: "Advanced Filters" },
-  { id: "delivery", label: "Delivery & Schedule" },
+  { id: "basic", label: "Filters" },
+  { id: "advanced", label: "Advanced" },
+  { id: "delivery", label: "Delivery" },
 ];
 
 function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
@@ -385,9 +385,9 @@ export const ConfigureReportPanel = forwardRef<
               }
             }}
           >
-            {tab.label}
+            <span className="app-report-config-tab__label">{tab.label}</span>
             {tab.id === "delivery" && scheduleEnabled && (
-              <span className="app-report-config-tab__badge">Scheduled</span>
+              <span className="app-report-config-tab__dot" title="Schedule enabled" aria-label="Schedule enabled" />
             )}
           </button>
         ))}
@@ -575,7 +575,7 @@ export const ConfigureReportPanel = forwardRef<
         {activeTab === "delivery" && (
           <section className="app-report-config-section app-report-config-section--delivery">
             <SelectField
-              label="Output Format"
+              label="Output format"
               value={outputFormat}
               onChange={setOutputFormat}
               options={outputFormatOptions}
@@ -587,14 +587,71 @@ export const ConfigureReportPanel = forwardRef<
               onChange={setEmailOnGenerate}
             />
 
-            <CheckboxField
-              label="Schedule this report"
-              checked={scheduleEnabled}
-              onChange={(v) => {
-                setScheduleEnabled(v);
-                onScheduleEnabledChange?.(v);
-              }}
-            />
+            <div
+              className={`app-report-config-delivery-schedule${scheduleEnabled ? " app-report-config-delivery-schedule--on" : ""}`}
+            >
+              <div className="app-report-config-delivery-schedule__head">
+                <div>
+                  <span className="app-report-config-delivery-schedule__title">Recurring schedule</span>
+                  <span className="app-report-config-delivery-schedule__desc">Daily, weekly, or monthly delivery</span>
+                </div>
+                <label className="app-report-config-toggle" aria-label="Enable recurring schedule">
+                  <input
+                    type="checkbox"
+                    checked={scheduleEnabled}
+                    onChange={(e) => {
+                      setScheduleEnabled(e.target.checked);
+                      onScheduleEnabledChange?.(e.target.checked);
+                    }}
+                  />
+                  <span className="app-report-config-toggle__track" aria-hidden />
+                </label>
+              </div>
+
+              <AnimatePresence initial={false}>
+                {scheduleEnabled && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    style={{ overflow: "hidden" }}
+                  >
+                    <div className="app-report-config-delivery-schedule__fields">
+                      <div className="app-report-config-delivery-schedule__grid">
+                        <SelectField
+                          label="Frequency"
+                          value={frequency}
+                          onChange={setFrequency}
+                          options={scheduleFrequencyOptions}
+                        />
+                        <SelectField label="Timezone" value={timezone} onChange={setTimezone} options={timezoneOptions} />
+                      </div>
+                      <label style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <FieldLabel>Delivery time</FieldLabel>
+                        <input
+                          type="time"
+                          value={deliveryTime}
+                          onChange={(e) => setDeliveryTime(e.target.value)}
+                          style={reportInputStyle}
+                          {...inputFocusHandlers}
+                        />
+                      </label>
+                      <label style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <FieldLabel required={scheduleEnabled}>Email subject</FieldLabel>
+                        <input
+                          type="text"
+                          value={emailSubject}
+                          onChange={(e) => setEmailSubject(e.target.value)}
+                          style={reportInputStyle}
+                          {...inputFocusHandlers}
+                        />
+                      </label>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             <AnimatePresence initial={false}>
               {(scheduleEnabled || emailOnGenerate) && (
@@ -605,55 +662,17 @@ export const ConfigureReportPanel = forwardRef<
                   transition={{ duration: 0.2 }}
                   style={{ overflow: "hidden" }}
                 >
-                  <div className="app-report-config-schedule-fields">
-                    {scheduleEnabled && (
-                      <>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                          <SelectField
-                            label="Frequency"
-                            value={frequency}
-                            onChange={setFrequency}
-                            options={scheduleFrequencyOptions}
-                          />
-                          <SelectField label="Timezone" value={timezone} onChange={setTimezone} options={timezoneOptions} />
-                        </div>
-
-                        <label style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                          <FieldLabel>Delivery Time</FieldLabel>
-                          <input
-                            type="time"
-                            value={deliveryTime}
-                            onChange={(e) => setDeliveryTime(e.target.value)}
-                            style={reportInputStyle}
-                            {...inputFocusHandlers}
-                          />
-                        </label>
-
-                        <label style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                          <FieldLabel required={scheduleEnabled}>Email Subject</FieldLabel>
-                          <input
-                            type="text"
-                            value={emailSubject}
-                            onChange={(e) => setEmailSubject(e.target.value)}
-                            style={reportInputStyle}
-                            {...inputFocusHandlers}
-                          />
-                        </label>
-                      </>
-                    )}
-
-                    <label style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                      <FieldLabel required={scheduleEnabled || emailOnGenerate}>Recipients</FieldLabel>
-                      <input
-                        type="text"
-                        placeholder="email@company.com, team@company.com"
-                        value={recipients}
-                        onChange={(e) => setRecipients(e.target.value)}
-                        style={reportInputStyle}
-                        {...inputFocusHandlers}
-                      />
-                    </label>
-                  </div>
+                  <label style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <FieldLabel required={scheduleEnabled || emailOnGenerate}>Recipients</FieldLabel>
+                    <input
+                      type="text"
+                      placeholder="email@company.com, team@company.com"
+                      value={recipients}
+                      onChange={(e) => setRecipients(e.target.value)}
+                      style={reportInputStyle}
+                      {...inputFocusHandlers}
+                    />
+                  </label>
                 </motion.div>
               )}
             </AnimatePresence>

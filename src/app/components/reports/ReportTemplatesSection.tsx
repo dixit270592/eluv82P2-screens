@@ -13,7 +13,6 @@ import { ReportSectionErrorBanner } from "./ReportSectionErrorBanner";
 import {
   reportFont,
   onDestructiveHover,
-  reportSectionLabelStyle,
 } from "./reportUiStyles";
 import { parseTemplateCategoryFromSearch } from "../../utils/reportCenterRoutes";
 
@@ -87,7 +86,7 @@ export function ReportTemplatesSection({
   const hasTemplates = filteredGroups.some((group) => group.templates.length > 0);
 
   return (
-    <div className="app-report-stack--loose" style={{ fontFamily: reportFont }}>
+    <div className="app-report-templates-layout" style={{ fontFamily: reportFont }}>
       {templatesError && templateGroups.length > 0 && !templatesErrorDismissed && (
         <ReportSectionErrorBanner
           message={templatesError}
@@ -129,15 +128,8 @@ export function ReportTemplatesSection({
         />
       ) : (
       filteredGroups.map((group) => (
-        <div key={group.id}>
-          <h3
-            style={{
-              ...reportSectionLabelStyle,
-              margin: "0 0 8px 0",
-            }}
-          >
-            {group.label}
-          </h3>
+        <div key={group.id} className="app-report-template-group">
+          <h3 className="app-report-template-group__title">{group.label}</h3>
           <div className="app-report-template-grid">
               {group.templates.map((template) => {
                 const isClone = "cloneOf" in template;

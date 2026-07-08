@@ -252,37 +252,51 @@ export function CreateReportFlow({
 
           result = buildGeneratedReportResult(config);
 
+          const isApprovalTemplate =
+            /approval|approver|pending/i.test(config.templateId) ||
+            /approval|approver|pending/i.test(config.reportName);
+
+          const demoColumns = isApprovalTemplate
+            ? [
+                { key: "approver", label: "Approver" },
+                { key: "approvalTime", label: "ApprovalTime" },
+                { key: "prs", label: "PR Count" },
+              ]
+            : [
+                { key: "vendor", label: "Vendor" },
+                { key: "department", label: "Department" },
+                { key: "amount", label: "Amount (USD)" },
+                { key: "status", label: "Status" },
+              ];
+
+          const demoRows = isApprovalTemplate
+            ? [
+                { approver: "Shreeve K", approvalTime: "578.93 hrs", prs: "12" },
+                { approver: "Snigdha Pandey", approvalTime: "2,784.22 hrs", prs: "18" },
+                { approver: "Rajvi Vachhani", approvalTime: "3,119.35 hrs", prs: "21" },
+                { approver: "Axar Patel", approvalTime: "189.20 hrs", prs: "6" },
+                { approver: "John Oneal", approvalTime: "412.55 hrs", prs: "9" },
+                { approver: "Ben Stokes", approvalTime: "96.40 hrs", prs: "4" },
+                { approver: "Alexa george", approvalTime: "49.15 hrs", prs: "3" },
+              ]
+            : Array.from({ length: Math.min(10, result.records) }, (_, i) => ({
+                vendor: config.vendor === "All Vendors" ? "Sample Vendor" : config.vendor,
+                department: config.departments?.[0] ?? "Engineering",
+                amount: `$${(1200 + i * 340).toLocaleString()}`,
+                status: config.approvalStatus === "All Statuses" ? "Approved" : config.approvalStatus,
+              }));
+
           setPreview({
 
             status: "success",
 
             reportName: config.reportName,
 
-            columns: [
+            columns: demoColumns,
 
-              { key: "id", label: "ID" },
+            rows: demoRows,
 
-              { key: "vendor", label: "Vendor" },
-
-              { key: "amount", label: "Amount" },
-
-              { key: "status", label: "Status" },
-
-            ],
-
-            rows: Array.from({ length: Math.min(10, result.records) }, (_, i) => ({
-
-              id: String(i + 1),
-
-              vendor: config.vendor === "All Vendors" ? "Sample Vendor" : config.vendor,
-
-              amount: `$${(1200 + i * 340).toLocaleString()}`,
-
-              status: config.approvalStatus === "All Statuses" ? "Approved" : config.approvalStatus,
-
-            })),
-
-            totalCount: result.records,
+            totalCount: isApprovalTemplate ? demoRows.length : result.records,
 
             generatedOn: result.generatedTime,
 
