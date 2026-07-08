@@ -18,7 +18,41 @@ import {
   type PreviewChartSeries,
 } from "../../utils/reportPreviewChartData";
 import type { PreviewColumn, PreviewRow } from "../../utils/reportPreviewData";
+import { UI_FONT_FAMILY } from "../../tokens/typography";
+import { reportFont } from "./reportUiStyles";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "../ui/chart";
+
+/** Matches every other report screen — inline font on all text nodes. */
+const textFont = { fontFamily: reportFont } as const;
+
+type TickProps = {
+  x?: number;
+  y?: number;
+  payload?: { value?: string | number };
+  textAnchor?: "inherit" | "end" | "middle" | "start";
+  fill?: string;
+};
+
+function ChartAxisTick({
+  x = 0,
+  y = 0,
+  payload,
+  textAnchor = "middle",
+  fill = reportChartTheme.muted,
+}: TickProps) {
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor={textAnchor}
+      fill={fill}
+      fontSize={11}
+      fontFamily={UI_FONT_FAMILY}
+    >
+      {payload?.value}
+    </text>
+  );
+}
 
 type ReportPreviewChartsProps = {
   columns: PreviewColumn[];
@@ -31,20 +65,54 @@ function buildChartConfig(series: PreviewChartSeries): ChartConfig {
   );
 }
 
-function PreviewChartLegend({ points }: { points: PreviewChartPoint[] }) {
+function PreviewChartLegend({
+  points,
+  layout = "grid",
+  showPercent = false,
+}: {
+  points: PreviewChartPoint[];
+  layout?: "grid" | "list";
+  showPercent?: boolean;
+}) {
+  const total = points.reduce((sum, point) => sum + point.value, 0);
+
   return (
-    <ul className="app-report-preview-chart-legend" aria-label="Chart legend">
-      {points.map((point) => (
-        <li key={point.label} className="app-report-preview-chart-legend__item">
-          <span
-            className="app-report-preview-chart-legend__swatch"
-            style={{ backgroundColor: point.color }}
-            aria-hidden
-          />
-          <span className="app-report-preview-chart-legend__label">{point.label}</span>
-          <span className="app-report-preview-chart-legend__value">{point.displayValue}</span>
-        </li>
-      ))}
+    <ul
+      className={`app-report-preview-chart-legend${
+        layout === "list" ? " app-report-preview-chart-legend--list" : ""
+      }`}
+      aria-label="Chart legend"
+      style={textFont}
+    >
+      {points.map((point) => {
+        const pct = total > 0 ? Math.round((point.value / total) * 100) : 0;
+        return (
+          <li
+            key={point.label}
+            className={`app-report-preview-chart-legend__item${
+              layout === "list" ? " app-report-preview-chart-legend__item--row" : ""
+            }`}
+            style={textFont}
+          >
+            <span
+              className="app-report-preview-chart-legend__swatch"
+              style={{ backgroundColor: point.color }}
+              aria-hidden
+            />
+            <span className="app-report-preview-chart-legend__label" style={textFont}>
+              {point.label}
+            </span>
+            <span className="app-report-preview-chart-legend__value" style={textFont}>
+              {point.displayValue}
+            </span>
+            {showPercent && (
+              <span className="app-report-preview-chart-legend__pct" style={textFont}>
+                {pct}%
+              </span>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -63,79 +131,23 @@ function PreviewChartTooltip({
   if (!point) return null;
 
   return (
-    <div className="app-report-preview-chart-tooltip">
-      <div className="app-report-preview-chart-tooltip__metric">{metricLabel}</div>
+    <div className="app-report-preview-chart-tooltip" style={textFont}>
+      <div className="app-report-preview-chart-tooltip__metric" style={textFont}>
+        {metricLabel}
+      </div>
       <div className="app-report-preview-chart-tooltip__row">
-        <span className="app-report-preview-chart-tooltip__label" style={{ color: point.color }}>
+        <span
+          className="app-report-preview-chart-tooltip__label"
+          style={{ ...textFont, color: point.color }}
+        >
           {point.label}
         </span>
-        <span className="app-report-preview-chart-tooltip__value">{point.displayValue}</span>
+        <span className="app-report-preview-chart-tooltip__value" style={textFont}>
+          {point.displayValue}
+        </span>
       </div>
     </div>
   );
-}
-
-function PieSliceLabel({
-  cx = 0,
-  cy = 0,
-  midAngle = 0,
-  outerRadius = 0,
-  fill,
-  label,
-  displayValue,
-}: {
-  cx?: number;
-  cy?: number;
-  midAngle?: number;
-  outerRadius?: number;
-  fill?: string;
-  label?: string;
-  displayValue?: string;
-}) {
-  if (!label || !displayValue) return null;
-
-  const RADIAN = Math.PI / 180;
-  const radius = outerRadius + 30;
-  const x = cx + radius * Math.cos(-midAngle * RADIAN);
-  const y = cy + radius * Math.sin(-midAngle * RADIAN);
-  const anchor = x > cx ? "start" : "end";
-
-  return (
-    <text
-      x={x}
-      y={y}
-      textAnchor={anchor}
-      dominantBaseline="central"
-      className="app-report-preview-pie-label"
-    >
-      <tspan x={x} dy="-0.4em" fill={fill} fontWeight={700}>
-        {label}:
-      </tspan>
-      <tspan x={x} dy="1.35em" fill={reportChartTheme.text} fontWeight={600}>
-        {displayValue}
-      </tspan>
-    </text>
-  );
-}
-
-function PieLabelLine(props: {
-  cx?: number;
-  cy?: number;
-  midAngle?: number;
-  outerRadius?: number;
-  stroke?: string;
-}) {
-  const { cx = 0, cy = 0, midAngle = 0, outerRadius = 0, stroke = reportChartTheme.mutedLight } =
-    props;
-  const RADIAN = Math.PI / 180;
-  const startRadius = outerRadius + 4;
-  const endRadius = outerRadius + 22;
-  const x1 = cx + startRadius * Math.cos(-midAngle * RADIAN);
-  const y1 = cy + startRadius * Math.sin(-midAngle * RADIAN);
-  const x2 = cx + endRadius * Math.cos(-midAngle * RADIAN);
-  const y2 = cy + endRadius * Math.sin(-midAngle * RADIAN);
-
-  return <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={stroke} strokeWidth={1} />;
 }
 
 function ReportPreviewBarChart({ series }: { series: PreviewChartSeries }) {
@@ -144,8 +156,16 @@ function ReportPreviewBarChart({ series }: { series: PreviewChartSeries }) {
   const config = buildChartConfig(series);
 
   return (
-    <section className="app-report-preview-chart-block" aria-labelledby="preview-bar-chart-title">
-      <h4 id="preview-bar-chart-title" className="app-report-preview-chart-block__title">
+    <section
+      className="app-report-preview-chart-block"
+      aria-labelledby="preview-bar-chart-title"
+      style={textFont}
+    >
+      <h4
+        id="preview-bar-chart-title"
+        className="app-report-preview-chart-block__title"
+        style={textFont}
+      >
         Bar chart by {series.labelColumn.label}
       </h4>
       <div className="app-report-preview-chart-block__canvas">
@@ -163,21 +183,21 @@ function ReportPreviewBarChart({ series }: { series: PreviewChartSeries }) {
               angle={-35}
               textAnchor="end"
               height={76}
-              tick={{ fill: reportChartTheme.muted, fontSize: 11 }}
-              label={{
-                value: series.labelColumn.label,
-                position: "insideBottom",
-                offset: -2,
-                fill: reportChartTheme.muted,
-                fontSize: 11,
-              }}
+              tick={(props) => (
+                <ChartAxisTick {...props} textAnchor="end" fill={reportChartTheme.muted} />
+              )}
             />
             <YAxis
               tickLine={false}
               axisLine={false}
               width={52}
-              tick={{ fill: reportChartTheme.mutedLight, fontSize: 11 }}
-              tickFormatter={(value) => formatAxisValue(Number(value), series.unit)}
+              tick={(props) => (
+                <ChartAxisTick
+                  {...props}
+                  payload={{ value: formatAxisValue(Number(props.payload?.value), series.unit) }}
+                  fill={reportChartTheme.mutedLight}
+                />
+              )}
               label={{
                 value: yAxisLabel,
                 angle: -90,
@@ -185,6 +205,7 @@ function ReportPreviewBarChart({ series }: { series: PreviewChartSeries }) {
                 offset: 14,
                 fill: reportChartTheme.muted,
                 fontSize: 11,
+                fontFamily: UI_FONT_FAMILY,
               }}
             />
             <ChartTooltip
@@ -198,7 +219,10 @@ function ReportPreviewBarChart({ series }: { series: PreviewChartSeries }) {
               <LabelList
                 dataKey="displayValue"
                 position="top"
-                className="app-report-preview-bar-chart__label"
+                fontFamily={UI_FONT_FAMILY}
+                fontSize={11}
+                fontWeight={600}
+                fill={reportChartTheme.text}
               />
             </Bar>
           </BarChart>
@@ -212,58 +236,58 @@ function ReportPreviewBarChart({ series }: { series: PreviewChartSeries }) {
 function ReportPreviewPieChart({ series }: { series: PreviewChartSeries }) {
   const metricLabel = series.valueColumn.label.replace(/\([^)]*\)/g, "").trim();
   const config = buildChartConfig(series);
+  const total = series.points.reduce((sum, point) => sum + point.value, 0);
+  const totalLabel = total.toLocaleString(undefined, {
+    maximumFractionDigits: series.unit === "hrs" || series.unit === "days" ? 2 : 0,
+  });
 
   return (
-    <section className="app-report-preview-chart-block" aria-labelledby="preview-pie-chart-title">
-      <h4 id="preview-pie-chart-title" className="app-report-preview-chart-block__title">
+    <section
+      className="app-report-preview-chart-block"
+      aria-labelledby="preview-pie-chart-title"
+      style={textFont}
+    >
+      <h4
+        id="preview-pie-chart-title"
+        className="app-report-preview-chart-block__title"
+        style={textFont}
+      >
         Pie chart by {series.labelColumn.label}
       </h4>
-      <div className="app-report-preview-chart-block__canvas app-report-preview-chart-block__canvas--pie">
-        <ChartContainer config={config} className="app-report-preview-pie-chart">
-          <PieChart margin={{ top: 12, right: 12, left: 12, bottom: 12 }}>
-            <ChartTooltip content={<PreviewChartTooltip metricLabel={metricLabel} />} />
-            <Pie
-              data={series.points}
-              dataKey="value"
-              nameKey="label"
-              cx="50%"
-              cy="50%"
-              outerRadius={104}
-              paddingAngle={1.5}
-              stroke="#ffffff"
-              strokeWidth={2}
-              labelLine={(props) => (
-                <PieLabelLine
-                  cx={props.cx}
-                  cy={props.cy}
-                  midAngle={props.midAngle}
-                  outerRadius={props.outerRadius}
-                  stroke={props.stroke ?? props.payload?.fill}
-                />
-              )}
-              label={(props) => {
-                const point = props.payload as PreviewChartSeries["points"][number] | undefined;
-                return (
-                  <PieSliceLabel
-                    cx={props.cx}
-                    cy={props.cy}
-                    midAngle={props.midAngle}
-                    outerRadius={props.outerRadius}
-                    fill={point?.color ?? props.fill}
-                    label={point?.label}
-                    displayValue={point?.displayValue}
-                  />
-                );
-              }}
-            >
-              {series.points.map((point) => (
-                <Cell key={point.label} fill={point.color} />
-              ))}
-            </Pie>
-          </PieChart>
-        </ChartContainer>
+      <div className="app-report-preview-pie-layout">
+        <div className="app-report-preview-pie-chart-wrap">
+          <ChartContainer config={config} className="app-report-preview-pie-chart">
+            <PieChart margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+              <ChartTooltip content={<PreviewChartTooltip metricLabel={metricLabel} />} />
+              <Pie
+                data={series.points}
+                dataKey="value"
+                nameKey="label"
+                cx="50%"
+                cy="50%"
+                innerRadius={62}
+                outerRadius={98}
+                paddingAngle={2}
+                stroke="#ffffff"
+                strokeWidth={2}
+              >
+                {series.points.map((point) => (
+                  <Cell key={point.label} fill={point.color} />
+                ))}
+              </Pie>
+            </PieChart>
+          </ChartContainer>
+          <div className="app-report-preview-pie-center" aria-hidden style={textFont}>
+            <span className="app-report-preview-pie-center__value" style={textFont}>
+              {totalLabel}
+            </span>
+            <span className="app-report-preview-pie-center__label" style={textFont}>
+              {metricLabel}
+            </span>
+          </div>
+        </div>
+        <PreviewChartLegend points={series.points} layout="list" showPercent />
       </div>
-      <PreviewChartLegend points={series.points} />
     </section>
   );
 }
@@ -273,9 +297,9 @@ export function ReportPreviewCharts({ columns, rows }: ReportPreviewChartsProps)
 
   if (!series) {
     return (
-      <div className="app-report-preview-charts__empty">
-        <p>Charts are unavailable for this preview.</p>
-        <span>
+      <div className="app-report-preview-charts__empty" style={textFont}>
+        <p style={textFont}>Charts are unavailable for this preview.</p>
+        <span style={textFont}>
           Generate a report with at least one category column and one numeric column to see charts.
         </span>
       </div>
@@ -283,7 +307,7 @@ export function ReportPreviewCharts({ columns, rows }: ReportPreviewChartsProps)
   }
 
   return (
-    <div className="app-report-preview-charts">
+    <div className="app-report-preview-charts" style={textFont}>
       <ReportPreviewBarChart series={series} />
       <ReportPreviewPieChart series={series} />
     </div>

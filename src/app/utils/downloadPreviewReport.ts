@@ -81,10 +81,11 @@ function buildBarChartSvg(series: PreviewChartSeries): string {
 }
 
 function buildPieChartSvg(series: PreviewChartSeries): string {
-  const size = 360;
+  const size = 280;
   const cx = size / 2;
   const cy = size / 2;
-  const radius = 108;
+  const outerRadius = 98;
+  const innerRadius = 62;
   const total = series.points.reduce((sum, point) => sum + point.value, 0) || 1;
   let startAngle = -Math.PI / 2;
 
@@ -92,49 +93,47 @@ function buildPieChartSvg(series: PreviewChartSeries): string {
     .map((point) => {
       const sliceAngle = (point.value / total) * Math.PI * 2;
       const endAngle = startAngle + sliceAngle;
-      const x1 = cx + radius * Math.cos(startAngle);
-      const y1 = cy + radius * Math.sin(startAngle);
-      const x2 = cx + radius * Math.cos(endAngle);
-      const y2 = cy + radius * Math.sin(endAngle);
+      const x1 = cx + outerRadius * Math.cos(startAngle);
+      const y1 = cy + outerRadius * Math.sin(startAngle);
+      const x2 = cx + outerRadius * Math.cos(endAngle);
+      const y2 = cy + outerRadius * Math.sin(endAngle);
+      const x3 = cx + innerRadius * Math.cos(endAngle);
+      const y3 = cy + innerRadius * Math.sin(endAngle);
+      const x4 = cx + innerRadius * Math.cos(startAngle);
+      const y4 = cy + innerRadius * Math.sin(startAngle);
       const largeArc = sliceAngle > Math.PI ? 1 : 0;
-      const midAngle = startAngle + sliceAngle / 2;
-      const labelRadius = radius + 34;
-      const labelX = cx + labelRadius * Math.cos(midAngle);
-      const labelY = cy + labelRadius * Math.sin(midAngle);
-      const anchor = labelX >= cx ? "start" : "end";
-      const lineX = cx + (radius + 8) * Math.cos(midAngle);
-      const lineY = cy + (radius + 8) * Math.sin(midAngle);
-      const path = `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${radius} ${radius} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+      const path = `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${x3.toFixed(2)} ${y3.toFixed(2)} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${x4.toFixed(2)} ${y4.toFixed(2)} Z`;
       startAngle = endAngle;
 
-      return `
-        <g>
-          <path d="${path}" fill="${point.color}" stroke="#ffffff" stroke-width="2" />
-          <polyline points="${lineX.toFixed(1)},${lineY.toFixed(1)} ${labelX.toFixed(1)},${labelY.toFixed(1)}" fill="none" stroke="${point.color}" stroke-width="1" />
-          <text x="${labelX.toFixed(1)}" y="${(labelY - 6).toFixed(1)}" text-anchor="${anchor}" font-size="11" font-weight="700" fill="${point.color}">${escapeHtml(point.label)}:</text>
-          <text x="${labelX.toFixed(1)}" y="${(labelY + 10).toFixed(1)}" text-anchor="${anchor}" font-size="11" font-weight="600" fill="${reportChartTheme.text}">${escapeHtml(point.displayValue)}</text>
-        </g>`;
+      return `<path d="${path}" fill="${point.color}" stroke="#ffffff" stroke-width="2" />`;
     })
     .join("");
+
+  const totalLabel = total.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const metricLabel = escapeHtml(series.valueColumn.label.replace(/\([^)]*\)/g, "").trim());
 
   return `
     <svg viewBox="0 0 ${size} ${size}" width="100%" height="${size}" role="img" aria-label="Pie chart by ${escapeHtml(series.labelColumn.label)}">
       ${slices}
+      <text x="${cx}" y="${(cy - 4).toFixed(1)}" text-anchor="middle" font-size="18" font-weight="700" fill="${reportChartTheme.text}">${escapeHtml(totalLabel)}</text>
+      <text x="${cx}" y="${(cy + 16).toFixed(1)}" text-anchor="middle" font-size="11" fill="${reportChartTheme.muted}">${metricLabel}</text>
     </svg>`;
 }
 
 function buildLegendHtml(series: PreviewChartSeries): string {
+  const total = series.points.reduce((sum, point) => sum + point.value, 0) || 1;
   return `
     <ul class="legend">
       ${series.points
-        .map(
-          (point) => `
+        .map((point) => {
+          const pct = Math.round((point.value / total) * 100);
+          return `
         <li>
           <span class="legend-swatch" style="background:${point.color}"></span>
           <span class="legend-label">${escapeHtml(point.label)}</span>
-          <span class="legend-value">${escapeHtml(point.displayValue)}</span>
-        </li>`,
-        )
+          <span class="legend-value">${escapeHtml(point.displayValue)} <span class="legend-pct">(${pct}%)</span></span>
+        </li>`;
+        })
         .join("")}
     </ul>`;
 }
@@ -193,10 +192,16 @@ export function downloadPreviewReport(payload: PreviewReportDownloadPayload): vo
 <head>
   <meta charset="utf-8" />
   <title>${escapeHtml(payload.reportName)} — Report Export</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap"
+  />
   <style>
     :root {
       color: ${reportChartTheme.text};
-      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      font-family: 'Instrument Sans', system-ui, sans-serif;
       background: ${reportChartTheme.pageBg};
     }
     body { margin: 0; padding: 32px; }
@@ -220,6 +225,7 @@ export function downloadPreviewReport(payload: PreviewReportDownloadPayload): vo
     .legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
     .legend-label { color: ${reportChartTheme.muted}; flex: 1; min-width: 0; }
     .legend-value { font-weight: 600; white-space: nowrap; }
+    .legend-pct { font-weight: 500; color: ${reportChartTheme.mutedLight}; }
     .empty-note { margin: 0; color: ${reportChartTheme.mutedLight}; font-size: 13px; }
     .report-footer { padding: 14px 28px 20px; font-size: 11px; color: ${reportChartTheme.mutedLight}; }
   </style>

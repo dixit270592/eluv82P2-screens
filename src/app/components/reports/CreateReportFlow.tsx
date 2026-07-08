@@ -32,7 +32,7 @@ import {
 
 } from "./reportGenerationTypes";
 
-import { onGhostBtnHover, reportGhostIconBtnStyle } from "./reportUiStyles";
+import { onGhostBtnHover, reportFont, reportGhostIconBtnStyle } from "./reportUiStyles";
 
 import { reportModalBackdropTransition, reportModalPanelTransition, useReportReducedMotion } from "./reportMotion";
 
@@ -507,6 +507,8 @@ export function CreateReportFlow({
             ref={panelRef}
 
             className="app-report-create-flow__panel"
+
+            style={{ fontFamily: reportFont }}
 
             initial={{ opacity: 0, y: reducedMotion ? 0 : 12 }}
 

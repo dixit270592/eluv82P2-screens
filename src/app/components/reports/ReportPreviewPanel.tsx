@@ -16,6 +16,8 @@ import {
   reportSectionTitleStyle,
 } from "./reportUiStyles";
 
+const panelFont = { fontFamily: reportFont } as const;
+
 export type PreviewState =
   | { status: "idle" }
   | { status: "loading"; reportName: string; scheduleMode?: boolean }
@@ -116,6 +118,7 @@ function PreviewSuccessCard({
   return (
     <div
       className={`app-report-preview-card${expanded ? " app-report-preview-card--expanded" : ""}`}
+      style={panelFont}
     >
       <div className="app-report-preview-card__header">
         <div className="app-report-preview-card__heading">
@@ -288,7 +291,7 @@ export function ReportPreviewPanel({ preview }: { preview: PreviewState }) {
 
   return (
     <>
-      <div className="app-report-preview-panel app-report-preview-panel--data">
+      <div className="app-report-preview-panel app-report-preview-panel--data" style={panelFont}>
         <div className="app-report-preview-panel__main">
           <PreviewSuccessCard
             preview={preview}
