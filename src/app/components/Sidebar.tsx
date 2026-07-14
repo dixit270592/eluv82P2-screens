@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
+import { AnimatePresence } from 'motion/react';
 import { Home, Download } from 'lucide-react';
 
 import { UI_FONT_STACK as F } from '../tokens/typography';
+import { ExportDataModal } from './ExportDataModal';
 
 const avatarNav = [
   { label: 'Pr', bg: '#E8956D', title: 'Purchase Requests', path: '/purchase-requests' },
@@ -13,8 +16,10 @@ const avatarNav = [
 export function Sidebar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [exportOpen, setExportOpen] = useState(false);
 
   return (
+    <>
     <nav
       aria-label="Primary module navigation"
       style={{
@@ -105,6 +110,7 @@ export function Sidebar() {
         type="button"
         title="Export"
         aria-label="Export"
+        onClick={() => setExportOpen(true)}
         style={{
           width: '40px',
           height: '40px',
@@ -115,14 +121,21 @@ export function Sidebar() {
           borderRadius: '8px',
           border: 'none',
           padding: 0,
-          background: 'transparent',
+          background: exportOpen ? 'rgba(255,255,255,0.12)' : 'transparent',
           transition: 'background 0.15s',
         }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+        onMouseEnter={(e) => { if (!exportOpen) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'; }}
+        onMouseLeave={(e) => { if (!exportOpen) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
       >
-        <Download size={16} color="#94A3B8" strokeWidth={1.8} />
+        <Download size={16} color={exportOpen ? '#FFFFFF' : '#94A3B8'} strokeWidth={1.8} />
       </button>
     </nav>
+
+    <AnimatePresence>
+      {exportOpen && (
+        <ExportDataModal onClose={() => setExportOpen(false)} />
+      )}
+    </AnimatePresence>
+    </>
   );
 }
