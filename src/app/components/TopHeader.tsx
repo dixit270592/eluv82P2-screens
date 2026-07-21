@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import logoSvg from '../../imports/Eluv8P2P-final-logo.svg';
+import logoSvg from '../../imports/Eluv8P2P-final-logo.png';
 import { UI_FONT_STACK as F } from '../tokens/typography';
 import { useAuth } from '../context/AuthContext';
 
@@ -166,7 +166,7 @@ export function TopHeader({ onNewRequest, prId }: TopHeaderProps) {
           src={logoSvg}
           alt="eluv8P2P"
           onClick={() => navigate('/')}
-          style={{ height: '28px', width: 'auto', cursor: 'pointer', display: 'block' }}
+          style={{ height: '31px', width: 'auto', cursor: 'pointer', display: 'block' }}
         />
       </div>
 

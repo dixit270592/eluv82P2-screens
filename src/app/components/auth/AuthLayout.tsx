@@ -1,5 +1,5 @@
 import { SkipToMainContent } from '../SkipToMainContent';
-import logoSvg from '../../../imports/Eluv8P2P-final-logo.svg';
+import logoSvg from '../../../imports/Eluv8P2P-final-logo.png';
 import { AuthBrandPanel } from './AuthBrandPanel';
 import { Eluv8AuthLogo, LOGIN_GREEN } from './Eluv8AuthLogo';
 

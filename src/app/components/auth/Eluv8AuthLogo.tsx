@@ -1,4 +1,5 @@
 import { cn } from '../ui/utils';
+import logoPng from '../../../imports/Eluv8P2P-final-logo.png';
 import { Eluv8LogoMark } from './Eluv8LogoMark';
 
 /** Login accent green (per design spec). */
@@ -15,18 +16,21 @@ export function Eluv8AuthLogo({ variant, className }: Eluv8AuthLogoProps) {
     return (
       <div className={cn('flex flex-col items-center gap-5 text-center', className)}>
         <Eluv8LogoMark className="h-16 w-auto sm:h-[4.5rem]" color="#ffffff" />
-        <p className="text-[2rem] font-bold tracking-[-0.02em] sm:text-[2.5rem]">
-          <span className="text-white">Eluv8</span>
-          <span style={{ color: LOGIN_GREEN }}>P2P</span>
+        <p className="text-[2rem] font-bold tracking-[-0.02em] text-white sm:text-[2.5rem]">
+          Eluv8P2P
         </p>
       </div>
     );
   }
 
   return (
-    <div className={cn('flex items-center gap-2.5', className)}>
-      <Eluv8LogoMark className="h-7 w-auto" color={LOGIN_GREEN} />
-      <span className="text-[1.125rem] font-bold tracking-[-0.01em] text-[#101828]">Eluv8P2P</span>
+    <div className={cn('flex items-center', className)}>
+      <img
+        src={logoPng}
+        alt="Eluv8P2P"
+        className="h-[38px] w-auto"
+        style={{ display: 'block' }}
+      />
     </div>
   );
 }
