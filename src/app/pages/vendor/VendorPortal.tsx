@@ -1,20 +1,31 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ArrowLeft, ChevronDown, ChevronRight, Search } from 'lucide-react';
-import { Sidebar } from '../../components/Sidebar';
+import { ModuleNavIcon } from '../../components/ModuleNavIcon';
+import {
+  InvoiceDocumentView,
+  InvoiceExtractedFieldsPanel,
+  InvoiceHistoryDrawer,
+  InvoiceListPanel,
+  PortalDocumentDetailView,
+  PortalDocumentListPanel,
+  PortalEmptyState,
+  PortalQuoteActionBar,
+  DEFAULT_EXTRACTED_PANEL_WIDTH,
+} from '../../components/vendor/InvoicePortalPanels';
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from '../../components/ui/resizable';
 import { TopHeader } from '../../components/TopHeader';
 import { SkipToMainContent } from '../../components/SkipToMainContent';
 import { createSeedVendors } from '../../data/vendorSetup';
 import {
   clonePortalDocument,
   createVendorPortalDocuments,
-  formatPortalCurrency,
   getPortalDocumentsForSection,
-  getPortalSectionLabel,
-  sumLineQty,
   sumLineTotal,
   type PortalDocument,
-  type PortalLineItem,
   type PortalSection,
 } from '../../data/vendorPortal';
 import { P2P_BRAND } from '../../tokens/brand';
@@ -22,11 +33,11 @@ import { UI_FONT_STACK as F } from '../../tokens/typography';
 
 const SECTION_META: Record<
   PortalSection,
-  { label: string; short: string; bg: string }
+  { label: string; short: string; colorStart: string; colorEnd: string }
 > = {
-  rfq: { label: 'RFQ', short: 'Rfq', bg: '#C9A227' },
-  po: { label: 'PO', short: 'Po', bg: P2P_BRAND.primary },
-  invoice: { label: 'Invoice', short: 'Inv', bg: '#E11D8D' },
+  rfq: { label: 'RFQ', short: 'RFQ', colorStart: '#E8C86A', colorEnd: '#C9A227' },
+  po: { label: 'PO', short: 'PO', colorStart: '#5EC9A8', colorEnd: '#1FA97A' },
+  invoice: { label: 'Invoice', short: 'INV', colorStart: '#F472B6', colorEnd: '#E11D8D' },
 };
 
 export function VendorPortal() {
@@ -37,13 +48,17 @@ export function VendorPortal() {
     [vendorId],
   );
 
-  const [section, setSection] = useState<PortalSection>('rfq');
+  const [section, setSection] = useState<PortalSection>('invoice');
   const [search, setSearch] = useState('');
   const [documents, setDocuments] = useState<PortalDocument[]>(() =>
     vendorId ? createVendorPortalDocuments(vendorId, vendor?.name ?? 'Vendor') : [],
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
+  const [aiInvoiceNotice, setAiInvoiceNotice] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const isInvoiceSection = section === 'invoice';
 
   const sectionDocs = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -68,6 +83,33 @@ export function VendorPortal() {
     setSelectedId(null);
     setSearch('');
     setSavedMessage(false);
+    setHistoryOpen(false);
+  };
+
+  const handleDocumentSelect = (id: string) => {
+    setSelectedId(id);
+    setSavedMessage(false);
+    setHistoryOpen(false);
+  };
+
+  const updateExtractedField = (docId: string, fieldId: string, value: string) => {
+    setDocuments((prev) =>
+      prev.map((doc) => {
+        if (doc.id !== docId || !doc.invoiceMeta) return doc;
+        return {
+          ...doc,
+          invoiceMeta: {
+            ...doc.invoiceMeta,
+            fieldSections: doc.invoiceMeta.fieldSections.map((section) => ({
+              ...section,
+              fields: section.fields.map((field) =>
+                field.id === fieldId ? { ...field, value } : field,
+              ),
+            })),
+          },
+        };
+      }),
+    );
   };
 
   const updateLineItem = (docId: string, lineId: string, unitPrice: number) => {
@@ -78,6 +120,21 @@ export function VendorPortal() {
           ...doc,
           lineItems: doc.lineItems.map((line) =>
             line.id === lineId ? { ...line, unitPrice } : line,
+          ),
+        };
+      }),
+    );
+    setSavedMessage(false);
+  };
+
+  const updateLinePartNumber = (docId: string, lineId: string, partNumber: string) => {
+    setDocuments((prev) =>
+      prev.map((doc) => {
+        if (doc.id !== docId) return doc;
+        return {
+          ...doc,
+          lineItems: doc.lineItems.map((line) =>
+            line.id === lineId ? { ...line, partNumber } : line,
           ),
         };
       }),
@@ -130,11 +187,7 @@ export function VendorPortal() {
   }
 
   return (
-    <AppShell
-      vendorName={vendor.name}
-      vendorCode={vendor.vendorCode}
-      onBack={() => navigate('/setup/vendor')}
-    >
+    <AppShell>
       <div
         style={{
           flex: 1,
@@ -150,212 +203,157 @@ export function VendorPortal() {
             flex: 1,
             minWidth: 0,
             display: 'flex',
+            position: 'relative',
             background: '#FFFFFF',
-            border: '1px solid #E4E7EC',
-            borderLeft: 'none',
-            borderRadius: '0 12px 12px 0',
+            borderTop: '1px solid #E4E7EC',
             overflow: 'hidden',
-            boxShadow: '0 1px 4px rgba(16,24,40,0.04)',
           }}
         >
-        <aside
-          style={{
-            width: '260px',
-            background: '#FFFFFF',
-            borderRight: '1px solid #EEF1F5',
-            display: 'flex',
-            flexDirection: 'column',
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ padding: '12px', borderBottom: '1px solid #E4E7EC' }}>
-            <label style={{ display: 'block', fontSize: '11px', color: '#64748B', marginBottom: '4px' }}>
-              Filter Elements
-            </label>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '8px 10px',
-                border: '1px solid #E4E7EC',
-                borderRadius: '8px',
-                fontSize: '13px',
-                color: '#334155',
-                background: '#FAFBFC',
-              }}
-            >
-              All
-              <ChevronDown size={14} color="#94A3B8" aria-hidden />
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '10px 12px',
-              borderBottom: '1px solid #E4E7EC',
-              fontSize: '13px',
-              fontWeight: 600,
-              color: '#334155',
-            }}
-          >
-            {getPortalSectionLabel(section)}
-            <ChevronDown size={14} color="#94A3B8" aria-hidden />
-          </div>
-
-          <div style={{ padding: '10px 12px', borderBottom: '1px solid #E4E7EC' }}>
-            <div style={{ position: 'relative' }}>
-              <Search
-                size={14}
-                color="#94A3B8"
-                style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)' }}
-                aria-hidden
-              />
-              <input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search here"
-                style={{
-                  width: '100%',
-                  padding: '8px 8px 8px 28px',
-                  border: '1px solid #E4E7EC',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontFamily: F,
-                  boxSizing: 'border-box',
-                  background: '#F8FAFC',
-                }}
-              />
-            </div>
-          </div>
-
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            {sectionDocs.length === 0 ? (
-              <p style={{ padding: '16px 12px', fontSize: '12px', color: '#94A3B8', margin: 0 }}>
-                No {getPortalSectionLabel(section)} records found.
-              </p>
-            ) : (
-              sectionDocs.map((doc) => {
-                const selected = activeDoc?.id === doc.id;
-                return (
-                  <button
-                    key={doc.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedId(doc.id);
-                      setSavedMessage(false);
-                    }}
-                    style={{
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '12px',
-                      border: 'none',
-                      borderBottom: '1px solid #EEF1F5',
-                      background: selected ? P2P_BRAND.surface : '#FFFFFF',
-                      cursor: 'pointer',
-                      fontFamily: F,
-                    }}
-                  >
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: P2P_BRAND.primaryStrong }}>
-                      {doc.documentNumber}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
-                      {doc.listTimestamp}
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </aside>
-
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: '#FFFFFF' }}>
-          {activeDoc ? (
+          {isInvoiceSection ? (
             <>
-              <DocumentDetail
-                doc={activeDoc}
-                vendorName={vendor.name}
-                onUpdateLine={updateLineItem}
+              <InvoiceListPanel
+                documents={sectionDocs}
+                activeDocId={activeDoc?.id ?? null}
+                search={search}
+                onSearchChange={setSearch}
+                onSelect={handleDocumentSelect}
+                onAiInvoice={() => setAiInvoiceNotice(true)}
               />
-              {activeDoc.type === 'rfq' && (
-                <div
-                  style={{
-                    padding: '12px 20px',
-                    borderTop: '1px solid #E4E7EC',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'flex-end',
-                    gap: '12px',
-                    background: '#FAFBFC',
-                  }}
+
+              {activeDoc ? (
+                <ResizablePanelGroup
+                  direction="horizontal"
+                  style={{ flex: 1, minWidth: 0, height: '100%' }}
                 >
-                  {savedMessage && (
-                    <span style={{ fontSize: '12px', color: P2P_BRAND.primaryStrong, fontWeight: 600 }}>
-                      Quote saved successfully
-                    </span>
-                  )}
-                  <button type="button" onClick={handleSaveQuote} style={primaryBtn}>
-                    Save Quote
-                  </button>
-                </div>
+                  <ResizablePanel defaultSize={58} minSize={38} style={{ minWidth: 0, display: 'flex' }}>
+                    <main
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        minWidth: 0,
+                        width: '100%',
+                        background: '#FFFFFF',
+                      }}
+                    >
+                      <InvoiceDocumentView doc={activeDoc} vendorName={vendor.name} />
+                    </main>
+                  </ResizablePanel>
+
+                  <ResizableHandle
+                    withHandle
+                    style={{ width: '1px', background: '#E4E7EC', flexShrink: 0 }}
+                  />
+
+                  <ResizablePanel
+                    defaultSize={42}
+                    minSize={30}
+                    maxSize={55}
+                    style={{ minWidth: DEFAULT_EXTRACTED_PANEL_WIDTH * 0.65, display: 'flex' }}
+                  >
+                    <InvoiceExtractedFieldsPanel
+                      key={activeDoc.id}
+                      doc={activeDoc}
+                      onFieldChange={(fieldId, value) =>
+                        updateExtractedField(activeDoc.id, fieldId, value)
+                      }
+                      historyOpen={historyOpen}
+                      onHistoryToggle={() => setHistoryOpen((prev) => !prev)}
+                    />
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              ) : (
+                <PortalEmptyState section="invoice" />
               )}
+
+              <InvoiceHistoryDrawer
+                history={activeDoc?.history ?? []}
+                open={historyOpen}
+                onToggle={() => setHistoryOpen((prev) => !prev)}
+              />
             </>
           ) : (
-            <div style={{ padding: '48px 24px', color: '#64748B', fontSize: '14px' }}>
-              Select a document from the list to view details.
-            </div>
-          )}
-        </main>
+            <>
+              <PortalDocumentListPanel
+                section={section}
+                documents={sectionDocs}
+                activeDocId={activeDoc?.id ?? null}
+                search={search}
+                onSearchChange={setSearch}
+                onSelect={handleDocumentSelect}
+              />
 
-        <aside
-          style={{
-            width: '240px',
-            background: '#FAFBFC',
-            borderLeft: '1px solid #EEF1F5',
-            flexShrink: 0,
-            overflowY: 'auto',
-          }}
-        >
+              <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: '#FFFFFF' }}>
+                {activeDoc ? (
+                  <>
+                    <PortalDocumentDetailView
+                      doc={activeDoc}
+                      vendorName={vendor.name}
+                      onUpdateLine={updateLineItem}
+                      onUpdatePartNumber={updateLinePartNumber}
+                      historyOpen={historyOpen}
+                      onHistoryToggle={() => setHistoryOpen((prev) => !prev)}
+                    />
+                    {activeDoc.type === 'rfq' && (
+                      <PortalQuoteActionBar
+                        lineTotal={sumLineTotal(activeDoc.lineItems)}
+                        saved={savedMessage}
+                        onSave={handleSaveQuote}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <PortalEmptyState section={section} />
+                )}
+              </main>
+
+              <InvoiceHistoryDrawer
+                history={activeDoc?.history ?? []}
+                open={historyOpen}
+                onToggle={() => setHistoryOpen((prev) => !prev)}
+              />
+            </>
+          )}
+        </section>
+
+        {aiInvoiceNotice && (
           <div
+            role="status"
             style={{
-              padding: '12px 14px',
-              borderBottom: '1px solid #E4E7EC',
+              position: 'fixed',
+              top: '72px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              padding: '10px 16px',
+              background: '#FFFFFF',
+              border: '1px solid #E4E7EC',
+              borderRadius: '8px',
+              boxShadow: '0 4px 16px rgba(16,24,40,0.12)',
               fontSize: '13px',
-              fontWeight: 600,
               color: '#334155',
+              zIndex: 50,
+              fontFamily: F,
             }}
           >
-            History
+            AI invoice capture will open when the integration is connected.
+            <button
+              type="button"
+              onClick={() => setAiInvoiceNotice(false)}
+              style={{
+                marginLeft: '12px',
+                border: 'none',
+                background: 'none',
+                color: P2P_BRAND.primary,
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontFamily: F,
+                fontSize: '13px',
+              }}
+            >
+              Dismiss
+            </button>
           </div>
-          {activeDoc ? (
-            <div style={{ padding: '8px 0' }}>
-              {activeDoc.history.map((entry) => (
-                <div
-                  key={entry.id}
-                  style={{
-                    padding: '10px 14px',
-                    borderBottom: '1px solid #F1F5F9',
-                    fontSize: '12px',
-                    lineHeight: 1.5,
-                    color: '#475569',
-                  }}
-                >
-                  <strong style={{ color: '#334155' }}>{entry.actor}:</strong> {entry.action}
-                  <div style={{ marginTop: '4px', fontSize: '11px', color: '#94A3B8' }}>
-                    {entry.timestamp}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p style={{ padding: '14px', fontSize: '12px', color: '#94A3B8', margin: 0 }}>No history yet.</p>
-          )}
-        </aside>
-        </section>
+        )}
       </div>
     </AppShell>
   );
@@ -380,7 +378,7 @@ function VendorPortalSidebar({
         flexShrink: 0,
         paddingTop: '14px',
         paddingBottom: '14px',
-        borderRadius: '12px 0 0 12px',
+        borderRadius: '0',
         border: '1px solid #1E2D3D',
         borderRight: 'none',
         boxSizing: 'border-box',
@@ -402,7 +400,7 @@ function VendorPortalSidebar({
                 width: '40px',
                 height: '40px',
                 borderRadius: '50%',
-                background: meta.bg,
+                background: 'transparent',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -419,17 +417,11 @@ function VendorPortalSidebar({
                 e.currentTarget.style.transform = 'scale(1)';
               }}
             >
-              <span
-                style={{
-                  color: '#FFFFFF',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  fontFamily: F,
-                  userSelect: 'none',
-                }}
-              >
-                {meta.short}
-              </span>
+              <ModuleNavIcon
+                label={meta.short}
+                colorStart={meta.colorStart}
+                colorEnd={meta.colorEnd}
+              />
             </button>
           );
         })}
@@ -438,268 +430,39 @@ function VendorPortalSidebar({
   );
 }
 
-function AppShell({
-  children,
-  vendorName,
-  vendorCode,
-  onBack,
-}: {
-  children: React.ReactNode;
-  vendorName?: string;
-  vendorCode?: string;
-  onBack?: () => void;
-}) {
+function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
         display: 'flex',
+        flexDirection: 'column',
         height: '100vh',
-        background: '#F5F7FA',
+        background: '#FFFFFF',
         fontFamily: F,
         overflow: 'hidden',
       }}
     >
       <SkipToMainContent />
-      <Sidebar />
 
-      <div
+      <TopHeader />
+
+      <main
+        id="main-content"
+        tabIndex={-1}
         style={{
           flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
           overflow: 'hidden',
           minWidth: 0,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
-        <TopHeader />
-
-        <main
-          id="main-content"
-          tabIndex={-1}
-          style={{
-            flex: 1,
-            overflow: 'hidden',
-            padding: '24px 28px 32px',
-            minWidth: 0,
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <nav aria-label="Breadcrumb" style={{ marginBottom: '16px', flexShrink: 0 }}>
-            <ol
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                margin: 0,
-                padding: 0,
-                listStyle: 'none',
-                fontSize: '12px',
-                color: '#64748B',
-                flexWrap: 'wrap',
-              }}
-            >
-              <li>Setup &amp; configuration</li>
-              <li aria-hidden>
-                <ChevronRight size={14} color="#CBD5E1" />
-              </li>
-              <li>Accounting Setup</li>
-              <li aria-hidden>
-                <ChevronRight size={14} color="#CBD5E1" />
-              </li>
-              <li>Vendor Setup</li>
-              {vendorName && (
-                <>
-                  <li aria-hidden>
-                    <ChevronRight size={14} color="#CBD5E1" />
-                  </li>
-                  <li style={{ color: P2P_BRAND.primaryStrong, fontWeight: 600 }}>
-                    {vendorName} portal
-                  </li>
-                </>
-              )}
-            </ol>
-          </nav>
-
-          {vendorName && onBack && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: '16px',
-                marginBottom: '20px',
-                flexShrink: 0,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div>
-                <button type="button" onClick={onBack} style={backBtnStyle}>
-                  <ArrowLeft size={16} aria-hidden />
-                  Back to vendors
-                </button>
-                <h1
-                  style={{
-                    margin: '12px 0 0',
-                    fontSize: '22px',
-                    fontWeight: 600,
-                    color: '#0F172A',
-                    letterSpacing: '-0.02em',
-                  }}
-                >
-                  Vendor Portal
-                </h1>
-                <p style={{ margin: '6px 0 0', fontSize: '14px', color: '#64748B' }}>
-                  {vendorName}
-                  {vendorCode ? ` · ${vendorCode}` : ''}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {children}
-        </main>
-      </div>
+        {children}
+      </main>
     </div>
   );
 }
-
-function DocumentDetail({
-  doc,
-  vendorName,
-  onUpdateLine,
-}: {
-  doc: PortalDocument;
-  vendorName: string;
-  onUpdateLine: (docId: string, lineId: string, unitPrice: number) => void;
-}) {
-  const sectionLabel = getPortalSectionLabel(doc.type);
-  const totalQty = sumLineQty(doc.lineItems);
-  const lineTotal = sumLineTotal(doc.lineItems);
-  const priceEditable = doc.type === 'rfq';
-
-  return (
-    <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', marginBottom: '24px' }}>
-        <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.7 }}>
-          <div>
-            <strong>Organization:</strong> {doc.organization}
-          </div>
-          <div>
-            <strong>Contact:</strong> {doc.contact || `${vendorName} vendor admin`}
-          </div>
-          <div>
-            <strong>Date:</strong> {doc.date}
-          </div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '28px', fontWeight: 700, color: '#1E293B', letterSpacing: '-0.02em' }}>
-            {sectionLabel}
-          </div>
-          <div style={{ fontSize: '14px', color: '#64748B', marginTop: '4px' }}>#{doc.documentNumber}</div>
-        </div>
-      </div>
-
-      <div style={{ overflowX: 'auto', border: '1px solid #E4E7EC', borderRadius: '8px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '720px', fontSize: '12px' }}>
-          <thead>
-            <tr style={{ background: '#F9FAFB' }}>
-              {[
-                'DESCRIPTION',
-                'DELIVERY LOCATION',
-                'SHIPPING METHOD',
-                'REQUIRED BY',
-                'QTY',
-                'UNIT PRICE',
-              ].map((col) => (
-                <th
-                  key={col}
-                  style={{
-                    padding: '10px 12px',
-                    textAlign: 'left',
-                    borderBottom: '1px solid #E4E7EC',
-                    fontWeight: 600,
-                    color: '#475569',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {col}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {doc.lineItems.map((line) => (
-              <LineRow
-                key={line.id}
-                line={line}
-                editable={priceEditable}
-                onPriceChange={(price) => onUpdateLine(doc.id, line.id, price)}
-              />
-            ))}
-            <tr style={{ background: '#FAFBFC', fontWeight: 600 }}>
-              <td colSpan={4} style={{ padding: '10px 12px', borderTop: '1px solid #E4E7EC' }}>
-                Total
-              </td>
-              <td style={{ padding: '10px 12px', borderTop: '1px solid #E4E7EC' }}>{totalQty}</td>
-              <td style={{ padding: '10px 12px', borderTop: '1px solid #E4E7EC' }}>
-                {formatPortalCurrency(lineTotal)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function LineRow({
-  line,
-  editable,
-  onPriceChange,
-}: {
-  line: PortalLineItem;
-  editable: boolean;
-  onPriceChange: (price: number) => void;
-}) {
-  return (
-    <tr>
-      <td style={cellStyle}>{line.description}</td>
-      <td style={cellStyle}>{line.deliveryLocation}</td>
-      <td style={cellStyle}>{line.shippingMethod}</td>
-      <td style={cellStyle}>{line.requiredBy}</td>
-      <td style={cellStyle}>{line.qty}</td>
-      <td style={cellStyle}>
-        {editable ? (
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            value={line.unitPrice}
-            onChange={(e) => onPriceChange(Number.parseFloat(e.target.value) || 0)}
-            style={{
-              width: '80px',
-              padding: '6px 8px',
-              border: '1px solid #E4E7EC',
-              borderRadius: '8px',
-              fontSize: '12px',
-              fontFamily: F,
-            }}
-          />
-        ) : (
-          formatPortalCurrency(line.unitPrice)
-        )}
-      </td>
-    </tr>
-  );
-}
-
-const cellStyle: React.CSSProperties = {
-  padding: '10px 12px',
-  borderBottom: '1px solid #EEF1F5',
-  color: '#334155',
-  verticalAlign: 'middle',
-};
 
 const primaryBtn: React.CSSProperties = {
   padding: '10px 18px',
@@ -707,21 +470,6 @@ const primaryBtn: React.CSSProperties = {
   borderRadius: '8px',
   background: P2P_BRAND.primary,
   color: '#FFFFFF',
-  fontSize: '13px',
-  fontWeight: 600,
-  cursor: 'pointer',
-  fontFamily: F,
-};
-
-const backBtnStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '8px',
-  padding: '8px 12px',
-  border: '1px solid #E4E7EC',
-  borderRadius: '8px',
-  background: '#FFFFFF',
-  color: '#334155',
   fontSize: '13px',
   fontWeight: 600,
   cursor: 'pointer',

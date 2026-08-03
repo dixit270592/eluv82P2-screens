@@ -8,6 +8,9 @@ export type PortalLineItem = {
   requiredBy: string;
   qty: number;
   unitPrice: number;
+  partNumber?: string;
+  uom?: string;
+  tax?: number;
 };
 
 export type PortalHistoryEntry = {
@@ -15,6 +18,34 @@ export type PortalHistoryEntry = {
   actor: string;
   action: string;
   timestamp: string;
+};
+
+export type InvoiceWorkflowStatus = 'extracted' | 'pending_verification' | 'approved';
+
+export type InvoiceExtractedField = {
+  id: string;
+  label: string;
+  value: string;
+  required?: boolean;
+  confidence: number;
+};
+
+export type InvoiceFieldSection = {
+  id: string;
+  title: string;
+  fields: InvoiceExtractedField[];
+};
+
+export type InvoiceMeta = {
+  aiConfidence: number;
+  workflowStatus: InvoiceWorkflowStatus;
+  isNonPo: boolean;
+  linkedPoNumber?: string;
+  verificationLabel: string;
+  needsAttention?: boolean;
+  vendorEmail?: string;
+  amount: number;
+  fieldSections: InvoiceFieldSection[];
 };
 
 export type PortalDocument = {
@@ -28,6 +59,7 @@ export type PortalDocument = {
   listTimestamp: string;
   lineItems: PortalLineItem[];
   history: PortalHistoryEntry[];
+  invoiceMeta?: InvoiceMeta;
 };
 
 const ORG_NAME = "Eric's Tenant-Do Not Change";
@@ -42,6 +74,7 @@ function rfqLineItems(): PortalLineItem[] {
       requiredBy: 'May-12-2026',
       qty: 11,
       unitPrice: 0,
+      partNumber: '',
     },
     {
       id: 'li-2',
@@ -51,6 +84,47 @@ function rfqLineItems(): PortalLineItem[] {
       requiredBy: 'May-12-2026',
       qty: 1,
       unitPrice: 0,
+      partNumber: '',
+    },
+    {
+      id: 'li-rfq-3',
+      description: 'Sticky notes',
+      deliveryLocation: 'NY Office, Loading Dock',
+      shippingMethod: 'Fed Ex',
+      requiredBy: 'May-12-2026',
+      qty: 5,
+      unitPrice: 0,
+      partNumber: '',
+    },
+    {
+      id: 'li-rfq-4',
+      description: 'Printer paper ream',
+      deliveryLocation: 'NY Office, Loading Dock',
+      shippingMethod: 'Fed Ex',
+      requiredBy: 'May-12-2026',
+      qty: 3,
+      unitPrice: 0,
+      partNumber: '',
+    },
+    {
+      id: 'li-rfq-5',
+      description: 'File folders',
+      deliveryLocation: 'NY Office, Loading Dock',
+      shippingMethod: 'Fed Ex',
+      requiredBy: 'May-12-2026',
+      qty: 8,
+      unitPrice: 0,
+      partNumber: '',
+    },
+    {
+      id: 'li-rfq-6',
+      description: 'Whiteboard markers',
+      deliveryLocation: 'NY Office, Loading Dock',
+      shippingMethod: 'Fed Ex',
+      requiredBy: 'May-12-2026',
+      qty: 2,
+      unitPrice: 0,
+      partNumber: '',
     },
   ];
 }
@@ -88,6 +162,216 @@ function invoiceLineItems(): PortalLineItem[] {
       requiredBy: 'May-31-2026',
       qty: 1,
       unitPrice: 1250,
+    },
+  ];
+}
+
+function invoice203LineItems(): PortalLineItem[] {
+  return [
+    {
+      id: 'li-inv3-1',
+      description: 'Enterprise workspace license',
+      deliveryLocation: 'Digital delivery',
+      shippingMethod: 'N/A',
+      requiredBy: 'May-28-2026',
+      qty: 12,
+      unitPrice: 89.99,
+      uom: 'Each',
+      tax: 0,
+    },
+    {
+      id: 'li-inv3-2',
+      description: 'Premium support package',
+      deliveryLocation: 'Digital delivery',
+      shippingMethod: 'N/A',
+      requiredBy: 'May-28-2026',
+      qty: 1,
+      unitPrice: 450,
+      uom: 'Each',
+      tax: 0,
+    },
+    {
+      id: 'li-inv3-3',
+      description: 'Implementation services',
+      deliveryLocation: 'Digital delivery',
+      shippingMethod: 'N/A',
+      requiredBy: 'May-28-2026',
+      qty: 2,
+      unitPrice: 200,
+      uom: 'Each',
+      tax: 0,
+    },
+    {
+      id: 'li-inv3-4',
+      description: 'Training session',
+      deliveryLocation: 'Digital delivery',
+      shippingMethod: 'N/A',
+      requiredBy: 'May-28-2026',
+      qty: 1,
+      unitPrice: 350,
+      uom: 'Each',
+      tax: 0,
+    },
+    {
+      id: 'li-inv3-5',
+      description: 'Hardware security dongle',
+      deliveryLocation: 'Digital delivery',
+      shippingMethod: 'N/A',
+      requiredBy: 'May-28-2026',
+      qty: 5,
+      unitPrice: 40,
+      uom: 'Each',
+      tax: 0,
+    },
+  ];
+}
+
+function invoice202LineItems(): PortalLineItem[] {
+  return [
+    {
+      id: 'li-inv202-1',
+      description: 'Monthly renewal',
+      deliveryLocation: 'Digital delivery',
+      shippingMethod: 'N/A',
+      requiredBy: 'May-31-2026',
+      qty: 10,
+      unitPrice: 50,
+      uom: 'Each',
+      tax: 0,
+    },
+  ];
+}
+
+function invoiceExtractedSections(
+  docNumber: string,
+  vendorName: string,
+  lineItems: PortalLineItem[],
+  poNumber?: string,
+  vendorEmail = 'ap@asana.com',
+  totalAmount?: number,
+): InvoiceFieldSection[] {
+  const amount =
+    totalAmount ?? lineItems.reduce((sum, line) => sum + line.qty * line.unitPrice, 0);
+  const amountStr = amount.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const poDisplay = poNumber?.trim() ? poNumber : '—';
+
+  const header: InvoiceFieldSection = {
+    id: 'header',
+    title: 'Invoice details',
+    fields: [
+      { id: 'f-inv', label: 'Invoice number', value: docNumber, required: true, confidence: 98.6 },
+      {
+        id: 'f-po',
+        label: 'PO number',
+        value: poDisplay,
+        required: true,
+        confidence: poNumber?.trim() ? 94.2 : 98.5,
+      },
+      { id: 'f-vendor', label: 'Vendor name', value: vendorName, confidence: 90 },
+      { id: 'f-email', label: 'Vendor email', value: vendorEmail, confidence: 95 },
+      {
+        id: 'f-amt',
+        label: 'Amount',
+        value: amountStr,
+        required: true,
+        confidence: 98.7,
+      },
+    ],
+  };
+
+  const lineSections = lineItems.map((line, index) => {
+    const itemNum = index + 1;
+    const lineAmount = line.qty * line.unitPrice;
+    const lineAmountStr = lineAmount.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    const taxStr = (line.tax ?? 0).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+    return {
+      id: `line-${line.id}`,
+      title: `Line item ${itemNum}`,
+      fields: [
+        {
+          id: `${line.id}-desc`,
+          label: 'Description',
+          value: line.description,
+          required: true,
+          confidence: 93.7,
+        },
+        {
+          id: `${line.id}-qty`,
+          label: 'Quantity',
+          value: String(line.qty),
+          required: true,
+          confidence: 95.6,
+        },
+        {
+          id: `${line.id}-amt`,
+          label: 'Line amount',
+          value: lineAmountStr,
+          required: true,
+          confidence: 95.6,
+        },
+        {
+          id: `${line.id}-uom`,
+          label: 'Unit of measure',
+          value: line.uom ?? 'Each',
+          confidence: 95.5,
+        },
+        {
+          id: `${line.id}-tax`,
+          label: 'Tax',
+          value: taxStr,
+          confidence: 95.5,
+        },
+      ],
+    };
+  });
+
+  return [header, ...lineSections];
+}
+
+export function invoiceHasLowConfidenceFields(meta: InvoiceMeta): boolean {
+  return meta.fieldSections.some((section) =>
+    section.fields.some((field) => getConfidenceTone(field.confidence) === 'low'),
+  );
+}
+
+const EMPTY_FIELD_PLACEHOLDERS = new Set(['—', '-', '–']);
+
+export function isInvoiceFieldValueValid(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.length > 0 && !EMPTY_FIELD_PLACEHOLDERS.has(trimmed);
+}
+
+export function areInvoiceRequiredFieldsComplete(meta: InvoiceMeta): boolean {
+  return meta.fieldSections.every((section) =>
+    section.fields.every(
+      (field) => !field.required || isInvoiceFieldValueValid(field.value),
+    ),
+  );
+}
+
+function invoiceHistory(docNumber: string, confidence: number): PortalHistoryEntry[] {
+  return [
+    {
+      id: 'h-ai-1',
+      actor: 'AI',
+      action: `Invoice Created — automatically extracted from AP inbox with ${confidence.toFixed(2)}% confidence`,
+      timestamp: '05/26/2026 at 10:52 AM',
+    },
+    {
+      id: 'h-ai-2',
+      actor: 'Elements Admin',
+      action: `added a verification note for ${docNumber}`,
+      timestamp: '05/26/2026 at 11:04 AM',
     },
   ];
 }
@@ -206,49 +490,115 @@ export function createVendorPortalDocuments(vendorId: string, vendorName: string
       id: `${vendorId}-inv-1`,
       vendorId,
       type: 'invoice',
-      documentNumber: 'INV-0008871',
+      documentNumber: 'INV202',
       organization: ORG_NAME,
       contact,
-      date: '05/15/2026',
-      listTimestamp: '05/15/2026 at 4:45 PM',
-      lineItems: invoiceLineItems(),
-      history: [
-        {
-          id: 'h-inv-1',
-          actor: 'Accounts Payable',
-          action: 'Invoice INV-0008871 submitted for payment',
-          timestamp: '05/15/2026 at 4:45 PM',
-        },
-      ],
+      date: '05/28/2026',
+      listTimestamp: '05/28/2026',
+      lineItems: invoice202LineItems(),
+      invoiceMeta: {
+        aiConfidence: 95.66,
+        workflowStatus: 'extracted',
+        isNonPo: true,
+        verificationLabel: 'Pending Verification',
+        amount: 500,
+        vendorEmail: 'aasana@satvasolutions.com',
+        fieldSections: invoiceExtractedSections(
+          'INV202',
+          'Aasana Lalani',
+          invoice202LineItems(),
+          undefined,
+          'aasana@satvasolutions.com',
+          500,
+        ),
+      },
+      history: invoiceHistory('INV202', 95.66),
     },
     {
       id: `${vendorId}-inv-2`,
       vendorId,
       type: 'invoice',
-      documentNumber: 'INV-0008850',
+      documentNumber: 'INV203',
       organization: ORG_NAME,
       contact,
-      date: '05/01/2026',
-      listTimestamp: '05/01/2026 at 8:20 AM',
+      date: '05/28/2026',
+      listTimestamp: '05/28/2026',
+      lineItems: invoice203LineItems(),
+      invoiceMeta: {
+        aiConfidence: 95.59,
+        workflowStatus: 'pending_verification',
+        isNonPo: true,
+        verificationLabel: 'Pending Verification',
+        amount: 2479.88,
+        vendorEmail: 'ap@asana.com',
+        fieldSections: (() => {
+          const sections = invoiceExtractedSections(
+            'INV203',
+            'Asana',
+            invoice203LineItems(),
+            undefined,
+            'ap@asana.com',
+            2479.88,
+          );
+          sections[0].fields = sections[0].fields.map((field) =>
+            field.id === 'f-po' ? { ...field, confidence: 42.1 } : field,
+          );
+          return sections;
+        })(),
+      },
+      history: invoiceHistory('INV203', 95.59),
+    },
+    {
+      id: `${vendorId}-inv-3`,
+      vendorId,
+      type: 'invoice',
+      documentNumber: 'INV201',
+      organization: ORG_NAME,
+      contact,
+      date: '05/27/2026',
+      listTimestamp: '05/27/2026',
       lineItems: [
         {
-          id: 'li-inv-2',
+          id: 'li-inv2-1',
           description: 'Hardware maintenance',
           deliveryLocation: 'On-site',
           shippingMethod: 'N/A',
           requiredBy: 'Apr-30-2026',
           qty: 1,
           unitPrice: 3200,
+          uom: 'Each',
+          tax: 0,
         },
       ],
-      history: [
-        {
-          id: 'h-inv-2',
-          actor: 'Accounts Payable',
-          action: 'Invoice INV-0008850 approved',
-          timestamp: '05/01/2026 at 8:20 AM',
-        },
-      ],
+      invoiceMeta: {
+        aiConfidence: 88.14,
+        workflowStatus: 'pending_verification',
+        isNonPo: false,
+        linkedPoNumber: 'PO-0000103',
+        verificationLabel: 'Pending Verification',
+        needsAttention: true,
+        amount: 3200,
+        vendorEmail: 'support@vendor.com',
+        fieldSections: invoiceExtractedSections(
+          'INV201',
+          vendorName,
+          [
+            {
+              id: 'li-inv2-1',
+              description: 'Hardware maintenance',
+              deliveryLocation: 'On-site',
+              shippingMethod: 'N/A',
+              requiredBy: 'Apr-30-2026',
+              qty: 1,
+              unitPrice: 3200,
+            },
+          ],
+          'PO-0000103',
+          'support@vendor.com',
+          3200,
+        ),
+      },
+      history: invoiceHistory('INV201', 88.14),
     },
   ];
 }
@@ -278,10 +628,29 @@ export function formatPortalCurrency(amount: number): string {
   return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+export function getConfidenceTone(confidence: number): 'high' | 'medium' | 'low' {
+  if (confidence >= 75) return 'high';
+  if (confidence >= 50) return 'medium';
+  return 'low';
+}
+
+export function formatConfidence(confidence: number): string {
+  return `${confidence.toFixed(confidence % 1 === 0 ? 0 : 2)}%`;
+}
+
 export function clonePortalDocument(doc: PortalDocument): PortalDocument {
   return {
     ...doc,
     lineItems: doc.lineItems.map((item) => ({ ...item })),
     history: doc.history.map((entry) => ({ ...entry })),
+    invoiceMeta: doc.invoiceMeta
+      ? {
+          ...doc.invoiceMeta,
+          fieldSections: doc.invoiceMeta.fieldSections.map((section) => ({
+            ...section,
+            fields: section.fields.map((field) => ({ ...field })),
+          })),
+        }
+      : undefined,
   };
 }

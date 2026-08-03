@@ -11,6 +11,8 @@ type ModuleNavIconProps = {
 
 export function ModuleNavIcon({ label, colorStart, colorEnd, size = 40 }: ModuleNavIconProps) {
   const gradId = useId();
+  const fontSize = label.length > 2 ? 8.5 : 10.5;
+  const letterSpacing = label.length > 2 ? 0.2 : 0.4;
 
   return (
     <svg
@@ -44,10 +46,10 @@ export function ModuleNavIcon({ label, colorStart, colorEnd, size = 40 }: Module
         textAnchor="middle"
         dominantBaseline="middle"
         fill={`url(#${gradId})`}
-        fontSize="10.5"
+        fontSize={fontSize}
         fontWeight="700"
         fontFamily={F}
-        letterSpacing="0.4"
+        letterSpacing={letterSpacing}
       >
         {label}
       </text>
