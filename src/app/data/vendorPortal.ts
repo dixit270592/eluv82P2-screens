@@ -68,7 +68,7 @@ function rfqLineItems(): PortalLineItem[] {
   return [
     {
       id: 'li-1',
-      description: 'Office Copy Paper',
+      description: 'paper',
       deliveryLocation: 'NY Office, Loading Dock',
       shippingMethod: 'Fed Ex',
       requiredBy: 'May-12-2026',
@@ -78,7 +78,7 @@ function rfqLineItems(): PortalLineItem[] {
     },
     {
       id: 'li-2',
-      description: 'Ballpoint Pens',
+      description: 'Pens',
       deliveryLocation: 'NY Office, Loading Dock',
       shippingMethod: 'Fed Ex',
       requiredBy: 'May-12-2026',
@@ -88,7 +88,7 @@ function rfqLineItems(): PortalLineItem[] {
     },
     {
       id: 'li-rfq-3',
-      description: 'Sticky Notes Pack',
+      description: 'Sticky notes',
       deliveryLocation: 'NY Office, Loading Dock',
       shippingMethod: 'Fed Ex',
       requiredBy: 'May-12-2026',
@@ -98,7 +98,7 @@ function rfqLineItems(): PortalLineItem[] {
     },
     {
       id: 'li-rfq-4',
-      description: 'Printer Paper Ream',
+      description: 'Printer paper ream',
       deliveryLocation: 'NY Office, Loading Dock',
       shippingMethod: 'Fed Ex',
       requiredBy: 'May-12-2026',
@@ -108,7 +108,7 @@ function rfqLineItems(): PortalLineItem[] {
     },
     {
       id: 'li-rfq-5',
-      description: 'Manila File Folders',
+      description: 'File folders',
       deliveryLocation: 'NY Office, Loading Dock',
       shippingMethod: 'Fed Ex',
       requiredBy: 'May-12-2026',
@@ -118,7 +118,7 @@ function rfqLineItems(): PortalLineItem[] {
     },
     {
       id: 'li-rfq-6',
-      description: 'Whiteboard Markers',
+      description: 'Whiteboard markers',
       deliveryLocation: 'NY Office, Loading Dock',
       shippingMethod: 'Fed Ex',
       requiredBy: 'May-12-2026',
@@ -133,7 +133,7 @@ function poLineItems(): PortalLineItem[] {
   return [
     {
       id: 'li-po-1',
-      description: 'Laser Toner Cartridge',
+      description: 'Laser toner cartridge',
       deliveryLocation: 'Chicago HQ, Receiving',
       shippingMethod: 'UPS Ground',
       requiredBy: 'Jun-01-2026',
@@ -142,7 +142,7 @@ function poLineItems(): PortalLineItem[] {
     },
     {
       id: 'li-po-2',
-      description: 'USB-C Docking Station',
+      description: 'USB-C docking station',
       deliveryLocation: 'Chicago HQ, Receiving',
       shippingMethod: 'UPS Ground',
       requiredBy: 'Jun-01-2026',
@@ -156,7 +156,7 @@ function invoiceLineItems(): PortalLineItem[] {
   return [
     {
       id: 'li-inv-1',
-      description: 'Monthly SaaS Subscription',
+      description: 'Monthly SaaS subscription',
       deliveryLocation: 'Digital delivery',
       shippingMethod: 'N/A',
       requiredBy: 'May-31-2026',
@@ -170,7 +170,7 @@ function invoice203LineItems(): PortalLineItem[] {
   return [
     {
       id: 'li-inv3-1',
-      description: 'Enterprise Workspace License',
+      description: 'Enterprise workspace license',
       deliveryLocation: 'Digital delivery',
       shippingMethod: 'N/A',
       requiredBy: 'May-28-2026',
@@ -181,7 +181,7 @@ function invoice203LineItems(): PortalLineItem[] {
     },
     {
       id: 'li-inv3-2',
-      description: 'Premium Support Package',
+      description: 'Premium support package',
       deliveryLocation: 'Digital delivery',
       shippingMethod: 'N/A',
       requiredBy: 'May-28-2026',
@@ -192,7 +192,7 @@ function invoice203LineItems(): PortalLineItem[] {
     },
     {
       id: 'li-inv3-3',
-      description: 'Implementation Services',
+      description: 'Implementation services',
       deliveryLocation: 'Digital delivery',
       shippingMethod: 'N/A',
       requiredBy: 'May-28-2026',
@@ -203,7 +203,7 @@ function invoice203LineItems(): PortalLineItem[] {
     },
     {
       id: 'li-inv3-4',
-      description: 'Onboarding Training Session',
+      description: 'Training session',
       deliveryLocation: 'Digital delivery',
       shippingMethod: 'N/A',
       requiredBy: 'May-28-2026',
@@ -214,7 +214,7 @@ function invoice203LineItems(): PortalLineItem[] {
     },
     {
       id: 'li-inv3-5',
-      description: 'Hardware Security Dongle',
+      description: 'Hardware security dongle',
       deliveryLocation: 'Digital delivery',
       shippingMethod: 'N/A',
       requiredBy: 'May-28-2026',
@@ -230,7 +230,7 @@ function invoice202LineItems(): PortalLineItem[] {
   return [
     {
       id: 'li-inv202-1',
-      description: 'Monthly SaaS License Renewal',
+      description: 'Monthly renewal',
       deliveryLocation: 'Digital delivery',
       shippingMethod: 'N/A',
       requiredBy: 'May-31-2026',
@@ -282,7 +282,8 @@ function invoiceExtractedSections(
     ],
   };
 
-  const lineSections = lineItems.map((line) => {
+  const lineSections = lineItems.map((line, index) => {
+    const itemNum = index + 1;
     const lineAmount = line.qty * line.unitPrice;
     const lineAmountStr = lineAmount.toLocaleString('en-US', {
       minimumFractionDigits: 2,
@@ -292,16 +293,15 @@ function invoiceExtractedSections(
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-    const lineName = line.description.trim() || 'Untitled line item';
 
     return {
       id: `line-${line.id}`,
-      title: lineName,
+      title: `Line item ${itemNum}`,
       fields: [
         {
           id: `${line.id}-desc`,
           label: 'Description',
-          value: lineName,
+          value: line.description,
           required: true,
           confidence: 93.7,
         },
@@ -421,7 +421,7 @@ export function createVendorPortalDocuments(vendorId: string, vendorName: string
       lineItems: [
         {
           id: 'li-3',
-          description: 'Ergonomic Office Chairs',
+          description: 'Office chairs',
           deliveryLocation: 'Boston Office',
           shippingMethod: 'Fed Ex',
           requiredBy: 'Jun-15-2026',
@@ -469,7 +469,7 @@ export function createVendorPortalDocuments(vendorId: string, vendorName: string
       lineItems: [
         {
           id: 'li-po-3',
-          description: '48-Port Network Switch',
+          description: 'Network switch 48-port',
           deliveryLocation: 'Dallas DC',
           shippingMethod: 'Fed Ex',
           requiredBy: 'May-25-2026',
@@ -560,7 +560,7 @@ export function createVendorPortalDocuments(vendorId: string, vendorName: string
       lineItems: [
         {
           id: 'li-inv2-1',
-          description: 'Annual Hardware Maintenance',
+          description: 'Hardware maintenance',
           deliveryLocation: 'On-site',
           shippingMethod: 'N/A',
           requiredBy: 'Apr-30-2026',
@@ -585,7 +585,7 @@ export function createVendorPortalDocuments(vendorId: string, vendorName: string
           [
             {
               id: 'li-inv2-1',
-              description: 'Annual Hardware Maintenance',
+              description: 'Hardware maintenance',
               deliveryLocation: 'On-site',
               shippingMethod: 'N/A',
               requiredBy: 'Apr-30-2026',
