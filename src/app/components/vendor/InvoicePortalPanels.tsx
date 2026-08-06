@@ -42,6 +42,7 @@ const NEUTRAL = {
   border: '#E4E7EC',
   borderLight: '#EEF1F5',
   surface: '#FAFBFC',
+  fieldBg: '#F5F5F5',
   white: '#FFFFFF',
 } as const;
 
@@ -1120,10 +1121,10 @@ function InlineField({
   const borderColor = isFocused
     ? P2P_BRAND.primary
     : isHovered
-      ? '#CBD5E1'
-      : tone.border;
+      ? tone.border
+      : NEUTRAL.border;
 
-  const background = isFocused ? NEUTRAL.white : isHovered ? NEUTRAL.white : tone.bg;
+  const background = isFocused ? NEUTRAL.white : isHovered ? tone.bg : NEUTRAL.fieldBg;
 
   return (
     <div style={{ minWidth: 0, gridColumn: spanFull ? '1 / -1' : undefined, maxWidth: spanFull ? '50%' : undefined }}>
