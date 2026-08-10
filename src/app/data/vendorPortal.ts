@@ -139,6 +139,8 @@ function poLineItems(): PortalLineItem[] {
       requiredBy: 'Jun-01-2026',
       qty: 4,
       unitPrice: 89.5,
+      uom: 'Each',
+      tax: 0,
     },
     {
       id: 'li-po-2',
@@ -148,6 +150,8 @@ function poLineItems(): PortalLineItem[] {
       requiredBy: 'Jun-01-2026',
       qty: 2,
       unitPrice: 245,
+      uom: 'Each',
+      tax: 0,
     },
   ];
 }

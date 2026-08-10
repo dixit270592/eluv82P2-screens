@@ -34,6 +34,7 @@ import { ShippingMethodSetup } from './pages/setup/ShippingMethodSetup';
 import { PurchaseOrderTemplateSettings } from './pages/setup/PurchaseOrderTemplateSettings';
 import { PurchaseOrderTemplatePreview } from './pages/setup/PurchaseOrderTemplatePreview';
 import { GeneratePurchaseOrder } from './pages/po/GeneratePurchaseOrder';
+import { PurchaseOrdersWorkspace } from './pages/po/PurchaseOrdersWorkspace';
 import { Reports } from './pages/Reports';
 import { ReportsLayout } from './pages/ReportsLayout';
 import { ReportsRedirect } from './pages/ReportsRedirect';
@@ -168,6 +169,10 @@ export const router = createBrowserRouter(
           {
             path: '/setup/po-template/preview',
             Component: PurchaseOrderTemplatePreview,
+          },
+          {
+            path: '/purchase-orders',
+            Component: PurchaseOrdersWorkspace,
           },
           {
             path: '/purchase-orders/generate',

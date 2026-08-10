@@ -8,6 +8,7 @@ import { ModuleNavIcon } from './ModuleNavIcon';
 
 const avatarNav = [
   { label: 'PR', colorStart: '#8FD4FA', colorEnd: '#5BB8EF', title: 'Purchase Requests', path: '/purchase-requests' },
+  { label: 'PO', colorStart: '#5EC9A8', colorEnd: '#1FA97A', title: 'Purchase Orders', path: '/purchase-orders' },
   { label: 'NV', colorStart: '#F5A898', colorEnd: '#E88272', title: 'Vendors', path: '#' },
   { label: 'XP', colorStart: '#6890E0', colorEnd: '#4568C8', title: 'Expenses', path: '#' },
   { label: 'RO', colorStart: '#4CE0D4', colorEnd: '#2EC4B8', title: 'Reports', path: '/reports' },
@@ -69,7 +70,12 @@ export function Sidebar() {
       {/* Avatar nav items */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', flex: 1 }}>
         {avatarNav.map((item) => {
-          const active = item.path !== '#' && (pathname === item.path || (item.path === '/purchase-requests' && pathname.startsWith('/pr')) || (item.path === '/reports' && pathname.startsWith('/reports')));
+          const active =
+            item.path !== '#' &&
+            (pathname === item.path ||
+              (item.path === '/purchase-requests' && pathname.startsWith('/pr')) ||
+              (item.path === '/purchase-orders' && pathname.startsWith('/purchase-orders')) ||
+              (item.path === '/reports' && pathname.startsWith('/reports')));
           return (
             <button
               key={item.label}

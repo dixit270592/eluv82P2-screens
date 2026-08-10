@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { ModuleNavIcon } from '../../components/ModuleNavIcon';
 import {
@@ -6,12 +6,16 @@ import {
   InvoiceExtractedFieldsPanel,
   InvoiceHistoryDrawer,
   InvoiceListPanel,
-  PortalDocumentDetailView,
-  PortalDocumentListPanel,
   PortalEmptyState,
   PortalQuoteActionBar,
   DEFAULT_EXTRACTED_PANEL_WIDTH,
 } from '../../components/vendor/InvoicePortalPanels';
+import {
+  PortalContextualDrawer,
+  PortalWorkspaceDetailView,
+  PortalWorkspaceEmpty,
+  PortalWorkspaceListPanel,
+} from '../../components/vendor/PortalDocumentWorkspace';
 import {
   ResizableHandle,
   ResizablePanel,
@@ -26,6 +30,7 @@ import {
   getPortalDocumentsForSection,
   sumLineTotal,
   type PortalDocument,
+  type PortalLineItem,
   type PortalSection,
 } from '../../data/vendorPortal';
 import { P2P_BRAND } from '../../tokens/brand';
@@ -48,7 +53,7 @@ export function VendorPortal() {
     [vendorId],
   );
 
-  const [section, setSection] = useState<PortalSection>('invoice');
+  const [section, setSection] = useState<PortalSection>('po');
   const [search, setSearch] = useState('');
   const [documents, setDocuments] = useState<PortalDocument[]>(() =>
     vendorId ? createVendorPortalDocuments(vendorId, vendor?.name ?? 'Vendor') : [],
@@ -56,20 +61,21 @@ export function VendorPortal() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
   const [aiInvoiceNotice, setAiInvoiceNotice] = useState(false);
+  const [drawerMode, setDrawerMode] = useState<'closed' | 'history'>('closed');
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const isInvoiceSection = section === 'invoice';
 
   const sectionDocs = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const filtered = getPortalDocumentsForSection(documents, section).filter((doc) => {
+    return getPortalDocumentsForSection(documents, section).filter((doc) => {
       if (!query) return true;
       return (
         doc.documentNumber.toLowerCase().includes(query) ||
-        doc.contact.toLowerCase().includes(query)
+        doc.contact.toLowerCase().includes(query) ||
+        doc.organization.toLowerCase().includes(query)
       );
     });
-    return filtered;
   }, [documents, section, search]);
 
   const activeDoc = useMemo(() => {
@@ -84,12 +90,22 @@ export function VendorPortal() {
     setSearch('');
     setSavedMessage(false);
     setHistoryOpen(false);
+    setDrawerMode('closed');
   };
 
   const handleDocumentSelect = (id: string) => {
     setSelectedId(id);
     setSavedMessage(false);
     setHistoryOpen(false);
+    setDrawerMode('closed');
+  };
+
+  const openHistoryDrawer = () => {
+    setDrawerMode((prev) => (prev === 'history' ? 'closed' : 'history'));
+  };
+
+  const closeContextualDrawer = () => {
+    setDrawerMode('closed');
   };
 
   const updateExtractedField = (docId: string, fieldId: string, value: string) => {
@@ -100,9 +116,9 @@ export function VendorPortal() {
           ...doc,
           invoiceMeta: {
             ...doc.invoiceMeta,
-            fieldSections: doc.invoiceMeta.fieldSections.map((section) => ({
-              ...section,
-              fields: section.fields.map((field) =>
+            fieldSections: doc.invoiceMeta.fieldSections.map((fieldSection) => ({
+              ...fieldSection,
+              fields: fieldSection.fields.map((field) =>
                 field.id === fieldId ? { ...field, value } : field,
               ),
             })),
@@ -112,30 +128,13 @@ export function VendorPortal() {
     );
   };
 
-  const updateLineItem = (docId: string, lineId: string, unitPrice: number) => {
+  const updateLineItem = (docId: string, lineId: string, patch: Partial<PortalLineItem>) => {
     setDocuments((prev) =>
       prev.map((doc) => {
         if (doc.id !== docId) return doc;
         return {
           ...doc,
-          lineItems: doc.lineItems.map((line) =>
-            line.id === lineId ? { ...line, unitPrice } : line,
-          ),
-        };
-      }),
-    );
-    setSavedMessage(false);
-  };
-
-  const updateLinePartNumber = (docId: string, lineId: string, partNumber: string) => {
-    setDocuments((prev) =>
-      prev.map((doc) => {
-        if (doc.id !== docId) return doc;
-        return {
-          ...doc,
-          lineItems: doc.lineItems.map((line) =>
-            line.id === lineId ? { ...line, partNumber } : line,
-          ),
+          lineItems: doc.lineItems.map((line) => (line.id === lineId ? { ...line, ...patch } : line)),
         };
       }),
     );
@@ -274,7 +273,7 @@ export function VendorPortal() {
             </>
           ) : (
             <>
-              <PortalDocumentListPanel
+              <PortalWorkspaceListPanel
                 section={section}
                 documents={sectionDocs}
                 activeDocId={activeDoc?.id ?? null}
@@ -286,13 +285,12 @@ export function VendorPortal() {
               <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: '#FFFFFF' }}>
                 {activeDoc ? (
                   <>
-                    <PortalDocumentDetailView
+                    <PortalWorkspaceDetailView
                       doc={activeDoc}
                       vendorName={vendor.name}
-                      onUpdateLine={updateLineItem}
-                      onUpdatePartNumber={updateLinePartNumber}
-                      historyOpen={historyOpen}
-                      onHistoryToggle={() => setHistoryOpen((prev) => !prev)}
+                      drawerMode={drawerMode}
+                      onOpenHistory={openHistoryDrawer}
+                      onUpdateLine={(lineId, patch) => updateLineItem(activeDoc.id, lineId, patch)}
                     />
                     {activeDoc.type === 'rfq' && (
                       <PortalQuoteActionBar
@@ -303,15 +301,16 @@ export function VendorPortal() {
                     )}
                   </>
                 ) : (
-                  <PortalEmptyState section={section} />
+                  <PortalWorkspaceEmpty section={section} />
                 )}
               </main>
 
-              <InvoiceHistoryDrawer
-                history={activeDoc?.history ?? []}
-                open={historyOpen}
-                onToggle={() => setHistoryOpen((prev) => !prev)}
-              />
+              {drawerMode === 'history' && activeDoc && (
+                <PortalContextualDrawer
+                  doc={activeDoc}
+                  onClose={closeContextualDrawer}
+                />
+              )}
             </>
           )}
         </section>
@@ -430,7 +429,7 @@ function VendorPortalSidebar({
   );
 }
 
-function AppShell({ children }: { children: React.ReactNode }) {
+function AppShell({ children }: { children: ReactNode }) {
   return (
     <div
       style={{
@@ -464,7 +463,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-const primaryBtn: React.CSSProperties = {
+const primaryBtn: CSSProperties = {
   padding: '10px 18px',
   border: 'none',
   borderRadius: '8px',
